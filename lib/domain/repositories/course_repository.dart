@@ -6,4 +6,5 @@ abstract class CourseRepository {
   Future<int> createCourse(Course course);
   Future<int> updateCourse(Course course);
   Future<int> deleteCourse(int id);
+  Future<List<String>> getDistinctSites();
 }

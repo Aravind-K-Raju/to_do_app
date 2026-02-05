@@ -20,7 +20,7 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 2,
+      version: 4,
       onCreate: _createDB,
       onUpgrade: _upgradeDB,
     );
@@ -29,6 +29,12 @@ class DatabaseHelper {
   Future<void> _upgradeDB(Database db, int oldVersion, int newVersion) async {
     if (oldVersion < 2) {
       await _createHackathonsTable(db);
+    }
+    if (oldVersion < 3) {
+      await _upgradeToV3(db);
+    }
+    if (oldVersion < 4) {
+      await _upgradeToV4(db);
     }
   }
 
@@ -43,12 +49,87 @@ class DatabaseHelper {
         id $idType,
         name $textType,
         theme $textNullable,
+        description $textNullable,
         start_date $textType,
         end_date $textNullable,
         team_size $intNullable,
         tech_stack $textNullable,
         outcome $textNullable,
         project_link $textNullable
+      )
+    ''');
+  }
+
+  Future<void> _upgradeToV4(Database db) async {
+    // Add description column to hackathons table
+    await db.execute('ALTER TABLE hackathons ADD COLUMN description TEXT');
+
+    // Create new tables for Event/Hackathon links and dates
+    await _createHackathonLinksTable(db);
+    await _createHackathonDatesTable(db);
+  }
+
+  Future<void> _createHackathonLinksTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE hackathon_links (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        hackathon_id INTEGER NOT NULL,
+        url TEXT NOT NULL,
+        description TEXT NOT NULL,
+        FOREIGN KEY (hackathon_id) REFERENCES hackathons (id) ON DELETE CASCADE
+      )
+    ''');
+  }
+
+  Future<void> _createHackathonDatesTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE hackathon_dates (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        hackathon_id INTEGER NOT NULL,
+        date_val TEXT NOT NULL,
+        description TEXT NOT NULL,
+        FOREIGN KEY (hackathon_id) REFERENCES hackathons (id) ON DELETE CASCADE
+      )
+    ''');
+  }
+
+  Future<void> _upgradeToV3(Database db) async {
+    // Add new columns to courses table
+    // default 'site' for existing rows (index 0 of enum) in logic, but here strict text
+    // We add columns one by one
+    await db.execute('ALTER TABLE courses ADD COLUMN type TEXT DEFAULT "site"');
+    await db.execute('ALTER TABLE courses ADD COLUMN source_name TEXT');
+    await db.execute('ALTER TABLE courses ADD COLUMN channel_name TEXT');
+
+    // Create new tables
+    await _createCourseLinksTable(db);
+    await _createCourseDatesTable(db);
+
+    // Migrate existing 'platform' data to 'source_name'
+    // 'platform' column still exists, we can copy data
+    await db.execute('UPDATE courses SET source_name = platform');
+  }
+
+  Future<void> _createCourseLinksTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE course_links (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        course_id INTEGER NOT NULL,
+        url TEXT NOT NULL,
+        description TEXT NOT NULL,
+        FOREIGN KEY (course_id) REFERENCES courses (id) ON DELETE CASCADE
+      )
+    ''');
+  }
+
+  Future<void> _createCourseDatesTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE course_dates (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        course_id INTEGER NOT NULL,
+        date_val TEXT NOT NULL,
+        description TEXT NOT NULL,
+        FOREIGN KEY (course_id) REFERENCES courses (id) ON DELETE CASCADE
       )
     ''');
   }
@@ -71,7 +152,10 @@ class DatabaseHelper {
         start_date $textType,
         completion_date $textNullable,
         progress_percent $realType,
-        status $textType
+        status $textType,
+        type $textType,
+        source_name $textType,
+        channel_name $textNullable
       )
     ''');
 
@@ -112,6 +196,14 @@ class DatabaseHelper {
 
     // Hackathons Table
     await _createHackathonsTable(db);
+
+    // New V3 Tables
+    await _createCourseLinksTable(db);
+    await _createCourseDatesTable(db);
+
+    // New V4 Tables
+    await _createHackathonLinksTable(db);
+    await _createHackathonDatesTable(db);
   }
 
   // ---------------- CRUD Operations ----------------
@@ -250,5 +342,167 @@ class DatabaseHelper {
   Future<int> deleteHackathon(int id) async {
     final db = await instance.database;
     return await db.delete('hackathons', where: 'id = ?', whereArgs: [id]);
+  }
+
+  // --- New Helper Methods for V3 ---
+
+  // Links
+  Future<void> insertCourseLinks(
+    int courseId,
+    List<Map<String, dynamic>> links,
+  ) async {
+    final db = await instance.database;
+    final batch = db.batch();
+    for (var link in links) {
+      link['course_id'] = courseId;
+      batch.insert('course_links', link);
+    }
+    await batch.commit(noResult: true);
+  }
+
+  Future<void> updateCourseLinks(
+    int courseId,
+    List<Map<String, dynamic>> links,
+  ) async {
+    final db = await instance.database;
+    // Simple strategy: delete all for this course and re-insert
+    await db.delete(
+      'course_links',
+      where: 'course_id = ?',
+      whereArgs: [courseId],
+    );
+    await insertCourseLinks(courseId, links);
+  }
+
+  Future<List<Map<String, dynamic>>> getLinksForCourse(int courseId) async {
+    final db = await instance.database;
+    return await db.query(
+      'course_links',
+      where: 'course_id = ?',
+      whereArgs: [courseId],
+    );
+  }
+
+  // Dates
+  Future<void> insertCourseDates(
+    int courseId,
+    List<Map<String, dynamic>> dates,
+  ) async {
+    final db = await instance.database;
+    final batch = db.batch();
+    for (var date in dates) {
+      date['course_id'] = courseId;
+      batch.insert('course_dates', date);
+    }
+    await batch.commit(noResult: true);
+  }
+
+  Future<void> updateCourseDates(
+    int courseId,
+    List<Map<String, dynamic>> dates,
+  ) async {
+    final db = await instance.database;
+    await db.delete(
+      'course_dates',
+      where: 'course_id = ?',
+      whereArgs: [courseId],
+    );
+    await insertCourseDates(courseId, dates);
+  }
+
+  Future<List<Map<String, dynamic>>> getDatesForCourse(int courseId) async {
+    final db = await instance.database;
+    return await db.query(
+      'course_dates',
+      where: 'course_id = ?',
+      whereArgs: [courseId],
+    );
+  }
+
+  // --- Hackathon/Event Helpers (V4) ---
+
+  // Hackathon Links
+  Future<void> insertHackathonLinks(
+    int hackathonId,
+    List<Map<String, dynamic>> links,
+  ) async {
+    final db = await instance.database;
+    final batch = db.batch();
+    for (var link in links) {
+      link['hackathon_id'] = hackathonId;
+      batch.insert('hackathon_links', link);
+    }
+    await batch.commit(noResult: true);
+  }
+
+  Future<void> updateHackathonLinks(
+    int hackathonId,
+    List<Map<String, dynamic>> links,
+  ) async {
+    final db = await instance.database;
+    await db.delete(
+      'hackathon_links',
+      where: 'hackathon_id = ?',
+      whereArgs: [hackathonId],
+    );
+    await insertHackathonLinks(hackathonId, links);
+  }
+
+  Future<List<Map<String, dynamic>>> getLinksForHackathon(
+    int hackathonId,
+  ) async {
+    final db = await instance.database;
+    return await db.query(
+      'hackathon_links',
+      where: 'hackathon_id = ?',
+      whereArgs: [hackathonId],
+    );
+  }
+
+  // Hackathon Dates
+  Future<void> insertHackathonDates(
+    int hackathonId,
+    List<Map<String, dynamic>> dates,
+  ) async {
+    final db = await instance.database;
+    final batch = db.batch();
+    for (var date in dates) {
+      date['hackathon_id'] = hackathonId;
+      batch.insert('hackathon_dates', date);
+    }
+    await batch.commit(noResult: true);
+  }
+
+  Future<void> updateHackathonDates(
+    int hackathonId,
+    List<Map<String, dynamic>> dates,
+  ) async {
+    final db = await instance.database;
+    await db.delete(
+      'hackathon_dates',
+      where: 'hackathon_id = ?',
+      whereArgs: [hackathonId],
+    );
+    await insertHackathonDates(hackathonId, dates);
+  }
+
+  Future<List<Map<String, dynamic>>> getDatesForHackathon(
+    int hackathonId,
+  ) async {
+    final db = await instance.database;
+    return await db.query(
+      'hackathon_dates',
+      where: 'hackathon_id = ?',
+      whereArgs: [hackathonId],
+    );
+  }
+
+  // Distinct Sites
+  Future<List<String>> getDistinctSites() async {
+    final db = await instance.database;
+    final result = await db.rawQuery(
+      'SELECT DISTINCT source_name FROM courses WHERE type = "site" ORDER BY source_name ASC',
+    );
+    return result.map((row) => row['source_name'] as String).toList();
   }
 }

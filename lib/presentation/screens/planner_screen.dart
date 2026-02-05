@@ -70,6 +70,7 @@ class _PlannerScreenState extends State<PlannerScreen> {
                 );
                 if (date != null) {
                   // ignore: use_build_context_synchronously
+                  if (!ctx.mounted) return;
                   Navigator.pop(
                     ctx,
                   ); // Close current to refresh? No just update var

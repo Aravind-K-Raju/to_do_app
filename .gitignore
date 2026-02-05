@@ -57,3 +57,4 @@ app.*.map.json
 
 # Windows
 /windows/flutter/ephemeral/
+android/build/reports/problems/problems-report.html

@@ -24,6 +24,7 @@ import 'domain/usecases/update_task.dart';
 import 'domain/usecases/delete_task.dart';
 import 'domain/usecases/hackathon_usecases.dart';
 import 'domain/usecases/get_daily_stats.dart';
+import 'domain/usecases/get_distinct_sites.dart';
 
 import 'dart:io';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -85,6 +86,7 @@ class _OfflineAppState extends State<OfflineApp> with WidgetsBindingObserver {
             createCourse: CreateCourse(courseRepository),
             updateCourse: UpdateCourse(courseRepository),
             deleteCourse: DeleteCourse(courseRepository),
+            getDistinctSites: GetDistinctSites(courseRepository),
           ),
         ),
         ChangeNotifierProvider(
