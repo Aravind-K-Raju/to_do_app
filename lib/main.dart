@@ -13,6 +13,8 @@ import 'data/repositories/task_repository_impl.dart';
 import 'data/repositories/hackathon_repository_impl.dart';
 import 'data/repositories/intelligence_repository_impl.dart';
 import 'data/repositories/assignment_repository_impl.dart';
+import 'data/repositories/note_repository_impl.dart';
+import 'presentation/providers/note_provider.dart';
 import 'domain/usecases/get_courses.dart';
 import 'domain/usecases/create_course.dart';
 import 'domain/usecases/update_course.dart';
@@ -49,6 +51,7 @@ class OfflineApp extends StatelessWidget {
     final hackathonRepository = HackathonRepositoryImpl();
     final intelligenceRepository = IntelligenceRepositoryImpl();
     final assignmentRepository = AssignmentRepositoryImpl();
+    final noteRepository = NoteRepositoryImpl();
 
     return MultiProvider(
       providers: [
@@ -95,6 +98,7 @@ class OfflineApp extends StatelessWidget {
             deleteAssignment: DeleteAssignment(assignmentRepository),
           ),
         ),
+        ChangeNotifierProvider(create: (_) => NoteProvider(noteRepository)),
       ],
       child: MaterialApp(
         debugShowCheckedModeBanner: false,

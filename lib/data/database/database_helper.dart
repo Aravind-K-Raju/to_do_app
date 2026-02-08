@@ -20,7 +20,7 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 6,
+      version: 7,
       onCreate: _createDB,
       onUpgrade: _upgradeDB,
     );
@@ -41,6 +41,9 @@ class DatabaseHelper {
     }
     if (oldVersion < 6) {
       await _upgradeToV6(db);
+    }
+    if (oldVersion < 7) {
+      await _upgradeToV7(db);
     }
   }
 
@@ -207,6 +210,10 @@ class DatabaseHelper {
 
     // Assignments Table (V6)
     await _createAssignmentsTable(db);
+
+    // Folders and Notes (V7)
+    await _createFoldersTable(db);
+    await _createNotesTable(db);
   }
 
   // ---------------- CRUD Operations ----------------
@@ -328,6 +335,37 @@ class DatabaseHelper {
         due_date INTEGER NOT NULL,
         submission_date INTEGER,
         is_completed INTEGER NOT NULL
+      )
+    ''');
+  }
+
+  Future<void> _upgradeToV7(Database db) async {
+    await _createFoldersTable(db);
+    await _createNotesTable(db);
+  }
+
+  Future<void> _createFoldersTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE folders (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        parent_id INTEGER,
+        created_at TEXT NOT NULL,
+        FOREIGN KEY (parent_id) REFERENCES folders (id) ON DELETE CASCADE
+      )
+    ''');
+  }
+
+  Future<void> _createNotesTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE notes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        title TEXT NOT NULL,
+        content TEXT NOT NULL,
+        folder_id INTEGER,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        FOREIGN KEY (folder_id) REFERENCES folders (id) ON DELETE CASCADE
       )
     ''');
   }
@@ -559,5 +597,79 @@ class DatabaseHelper {
       ORDER BY login_mail ASC
     ''');
     return result.map((row) => row['login_mail'] as String).toList();
+  }
+
+  // --- Folders & Notes Operations (V7) ---
+
+  // Folders
+  Future<int> createFolder(Map<String, dynamic> folder) async {
+    final db = await instance.database;
+    return await db.insert('folders', folder);
+  }
+
+  Future<List<Map<String, dynamic>>> getFolders({int? parentId}) async {
+    final db = await instance.database;
+    final whereClause = parentId == null
+        ? 'parent_id IS NULL'
+        : 'parent_id = ?';
+    final whereArgs = parentId == null ? [] : [parentId];
+
+    return await db.query(
+      'folders',
+      where: whereClause,
+      whereArgs: whereArgs,
+      orderBy: 'name ASC',
+    );
+  }
+
+  Future<int> updateFolder(Map<String, dynamic> folder) async {
+    final db = await instance.database;
+    return await db.update(
+      'folders',
+      folder,
+      where: 'id = ?',
+      whereArgs: [folder['id']],
+    );
+  }
+
+  Future<int> deleteFolder(int id) async {
+    final db = await instance.database;
+    return await db.delete('folders', where: 'id = ?', whereArgs: [id]);
+  }
+
+  // Notes
+  Future<int> createNote(Map<String, dynamic> note) async {
+    final db = await instance.database;
+    return await db.insert('notes', note);
+  }
+
+  Future<List<Map<String, dynamic>>> getNotes({int? folderId}) async {
+    final db = await instance.database;
+    final whereClause = folderId == null
+        ? 'folder_id IS NULL'
+        : 'folder_id = ?';
+    final whereArgs = folderId == null ? [] : [folderId];
+
+    return await db.query(
+      'notes',
+      where: whereClause,
+      whereArgs: whereArgs,
+      orderBy: 'updated_at DESC',
+    );
+  }
+
+  Future<int> updateNote(Map<String, dynamic> note) async {
+    final db = await instance.database;
+    return await db.update(
+      'notes',
+      note,
+      where: 'id = ?',
+      whereArgs: [note['id']],
+    );
+  }
+
+  Future<int> deleteNote(int id) async {
+    final db = await instance.database;
+    return await db.delete('notes', where: 'id = ?', whereArgs: [id]);
   }
 }

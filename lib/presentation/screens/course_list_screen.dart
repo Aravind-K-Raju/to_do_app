@@ -5,6 +5,8 @@ import '../widgets/items/course_list_item.dart';
 import 'course_add_edit_screen.dart';
 import 'course_detail_screen.dart';
 
+import 'notes/folder_list_screen.dart';
+
 class CourseListScreen extends StatefulWidget {
   const CourseListScreen({super.key});
 
@@ -25,6 +27,23 @@ class _CourseListScreenState extends State<CourseListScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      appBar: AppBar(
+        title: const Text('Courses'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.note_alt),
+            tooltip: 'Quick Notes',
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const FolderListScreen(),
+                ),
+              );
+            },
+          ),
+        ],
+      ),
       body: Consumer<CourseProvider>(
         builder: (context, provider, child) {
           if (provider.isLoading) {
@@ -57,6 +76,7 @@ class _CourseListScreenState extends State<CourseListScreen> {
         },
       ),
       floatingActionButton: FloatingActionButton(
+        heroTag: 'add_course_fab',
         onPressed: () {
           Navigator.push(
             context,

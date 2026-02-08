@@ -20,7 +20,7 @@ class IntelligenceRepositoryImpl implements IntelligenceRepository {
 
     // 1. Calculate Study Minutes for Date
     // 'study_sessions' table is deprecated/removed.
-    // TODO: Implement new way to track study time if needed.
+
     int totalMinutes = 0;
 
     // 2. Count Completed Tasks updated/completed today?

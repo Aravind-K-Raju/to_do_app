@@ -26,6 +26,7 @@ class _NavigationScaffoldState extends State<NavigationScaffold> {
   Widget build(BuildContext context) {
     return Scaffold(
       body: _screens[_currentIndex],
+
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _currentIndex,
         selectedItemColor: Colors.tealAccent,
