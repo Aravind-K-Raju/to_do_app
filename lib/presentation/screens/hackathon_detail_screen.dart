@@ -1,20 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
-import '../../domain/entities/course.dart';
-import '../providers/course_provider.dart';
-import 'course_add_edit_screen.dart';
+import '../../domain/entities/hackathon.dart';
+import '../providers/hackathon_provider.dart';
+import 'hackathon_add_edit_screen.dart';
 
-class CourseDetailScreen extends StatelessWidget {
-  final Course course;
+class HackathonDetailScreen extends StatelessWidget {
+  final Hackathon hackathon;
 
-  const CourseDetailScreen({super.key, required this.course});
+  const HackathonDetailScreen({super.key, required this.hackathon});
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text(course.title),
+        title: Text(hackathon.name),
         actions: [
           IconButton(
             icon: const Icon(Icons.edit),
@@ -22,7 +22,7 @@ class CourseDetailScreen extends StatelessWidget {
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (_) => CourseAddEditScreen(course: course),
+                  builder: (_) => HackathonAddEditScreen(hackathon: hackathon),
                 ),
               );
             },
@@ -33,7 +33,7 @@ class CourseDetailScreen extends StatelessWidget {
               final confirm = await showDialog<bool>(
                 context: context,
                 builder: (ctx) => AlertDialog(
-                  title: const Text('Delete Course?'),
+                  title: const Text('Delete Event?'),
                   content: const Text('This cannot be undone.'),
                   actions: [
                     TextButton(
@@ -50,10 +50,10 @@ class CourseDetailScreen extends StatelessWidget {
 
               if (confirm == true) {
                 if (context.mounted) {
-                  await Provider.of<CourseProvider>(
+                  await Provider.of<HackathonProvider>(
                     context,
                     listen: false,
-                  ).removeCourse(course.id!);
+                  ).removeHackathon(hackathon.id!);
                   if (context.mounted) Navigator.pop(context);
                 }
               }
@@ -61,28 +61,48 @@ class CourseDetailScreen extends StatelessWidget {
           ),
         ],
       ),
-      body: Padding(
+      body: SingleChildScrollView(
         padding: const EdgeInsets.all(16.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Platform
-            const Text(
-              'Platform:',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            Text(
-              '${course.sourceName}${course.channelName != null && course.channelName!.isNotEmpty ? " • ${course.channelName}" : ""}',
-              style: const TextStyle(fontSize: 16),
-            ),
-            const SizedBox(height: 16),
+            // Theme / Platform Equivalent
+            if (hackathon.theme != null && hackathon.theme!.isNotEmpty) ...[
+              const Text(
+                'Theme:',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+              Text(hackathon.theme!, style: const TextStyle(fontSize: 16)),
+              const SizedBox(height: 16),
+            ],
 
-            // Status
+            // Tech Stack
+            if (hackathon.techStack != null &&
+                hackathon.techStack!.isNotEmpty) ...[
+              const Text(
+                'Tech Stack:',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+              Text(hackathon.techStack!, style: const TextStyle(fontSize: 16)),
+              const SizedBox(height: 16),
+            ],
+
+            // Status (Derived) / Outcome
             const Text(
               'Status:',
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
-            Text(course.status, style: const TextStyle(fontSize: 16)),
+            Text(
+              hackathon.outcome != null && hackathon.outcome!.isNotEmpty
+                  ? hackathon.outcome!
+                  : (DateTime.now().isBefore(hackathon.startDate)
+                        ? 'Upcoming'
+                        : (hackathon.endDate != null &&
+                                  DateTime.now().isAfter(hackathon.endDate!)
+                              ? 'Completed'
+                              : 'Ongoing')),
+              style: const TextStyle(fontSize: 16),
+            ),
             const SizedBox(height: 16),
 
             // Start Date
@@ -91,18 +111,20 @@ class CourseDetailScreen extends StatelessWidget {
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             Text(
-              DateFormat.yMMMd().format(course.startDate),
+              '${DateFormat.yMMMd().format(hackathon.startDate)}'
+              '${hackathon.endDate != null ? ' - ${DateFormat.yMMMd().format(hackathon.endDate!)}' : ''}',
               style: const TextStyle(fontSize: 16),
             ),
             const SizedBox(height: 16),
 
             // Login
-            if (course.loginMail != null && course.loginMail!.isNotEmpty) ...[
+            if (hackathon.loginMail != null &&
+                hackathon.loginMail!.isNotEmpty) ...[
               const Text(
                 'Login:',
                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               ),
-              Text(course.loginMail!, style: const TextStyle(fontSize: 16)),
+              Text(hackathon.loginMail!, style: const TextStyle(fontSize: 16)),
               const SizedBox(height: 16),
             ],
 
@@ -112,18 +134,41 @@ class CourseDetailScreen extends StatelessWidget {
               style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             ),
             Text(
-              course.description ?? 'No description provided.',
+              hackathon.description ?? 'No description provided.',
               style: const TextStyle(fontSize: 16),
             ),
             const SizedBox(height: 16),
 
+            // Project Link
+            if (hackathon.projectLink != null &&
+                hackathon.projectLink!.isNotEmpty) ...[
+              const Text(
+                'Project Link:',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+              InkWell(
+                onTap: () {
+                  // TODO: link launch
+                },
+                child: Text(
+                  hackathon.projectLink!,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    color: Colors.blueAccent,
+                    decoration: TextDecoration.underline,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+            ],
+
             // Links
-            if (course.links.isNotEmpty) ...[
+            if (hackathon.links.isNotEmpty) ...[
               const Text(
                 'Links:',
                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               ),
-              ...course.links.map(
+              ...hackathon.links.map(
                 (link) => Padding(
                   padding: const EdgeInsets.only(top: 8.0),
                   child: Column(
@@ -153,13 +198,13 @@ class CourseDetailScreen extends StatelessWidget {
             ],
 
             // Timeline
-            if (course.timeline.isNotEmpty) ...[
+            if (hackathon.timeline.isNotEmpty) ...[
               const Text(
                 'Timeline:',
                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 8),
-              ...course.timeline.map(
+              ...hackathon.timeline.map(
                 (event) => Padding(
                   padding: const EdgeInsets.only(bottom: 12.0),
                   child: Row(
@@ -205,7 +250,7 @@ class CourseDetailScreen extends StatelessWidget {
               ),
               const SizedBox(height: 16),
             ],
-            const SizedBox(height: 20), // Bottom padding
+            const SizedBox(height: 20),
           ],
         ),
       ),

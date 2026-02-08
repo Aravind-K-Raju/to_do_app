@@ -25,6 +25,7 @@ import 'domain/usecases/delete_task.dart';
 import 'domain/usecases/hackathon_usecases.dart';
 import 'domain/usecases/get_daily_stats.dart';
 import 'domain/usecases/get_distinct_sites.dart';
+import 'domain/usecases/get_distinct_login_mails.dart';
 
 import 'dart:io';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -87,6 +88,7 @@ class _OfflineAppState extends State<OfflineApp> with WidgetsBindingObserver {
             updateCourse: UpdateCourse(courseRepository),
             deleteCourse: DeleteCourse(courseRepository),
             getDistinctSites: GetDistinctSites(courseRepository),
+            getDistinctLoginMails: GetDistinctLoginMails(courseRepository),
           ),
         ),
         ChangeNotifierProvider(
@@ -109,6 +111,9 @@ class _OfflineAppState extends State<OfflineApp> with WidgetsBindingObserver {
             createHackathon: CreateHackathon(hackathonRepository),
             updateHackathon: UpdateHackathon(hackathonRepository),
             deleteHackathon: DeleteHackathon(hackathonRepository),
+            getDistinctLoginMails: GetHackathonDistinctLoginMails(
+              hackathonRepository,
+            ),
           ),
         ),
         ChangeNotifierProvider(

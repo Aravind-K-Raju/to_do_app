@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:intl/intl.dart';
 import '../providers/hackathon_provider.dart';
+import '../widgets/items/hackathon_list_item.dart';
 import 'hackathon_add_edit_screen.dart';
+import 'hackathon_detail_screen.dart';
 
 class HackathonListScreen extends StatefulWidget {
   const HackathonListScreen({super.key});
@@ -38,29 +39,17 @@ class _HackathonListScreenState extends State<HackathonListScreen> {
             itemCount: provider.hackathons.length,
             itemBuilder: (context, index) {
               final hackathon = provider.hackathons[index];
-              return Card(
-                margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                child: ListTile(
-                  title: Text(
-                    hackathon.name,
-                    style: const TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                  subtitle: Text(
-                    '${DateFormat.yMMMd().format(hackathon.startDate)} • ${hackathon.theme ?? "No Theme"}',
-                  ),
-                  trailing: IconButton(
-                    icon: const Icon(Icons.edit),
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) =>
-                              HackathonAddEditScreen(hackathon: hackathon),
-                        ),
-                      );
-                    },
-                  ),
-                ),
+              return HackathonListItem(
+                hackathon: hackathon,
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) =>
+                          HackathonDetailScreen(hackathon: hackathon),
+                    ),
+                  );
+                },
               );
             },
           );

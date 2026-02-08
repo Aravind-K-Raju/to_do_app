@@ -25,7 +25,9 @@ class HackathonRepositoryImpl implements HackathonRepository {
       await _dbHelper.insertHackathonLinks(
         id,
         hackathon.links
-            .map((l) => {'url': l.url, 'description': l.description})
+            .map<Map<String, dynamic>>(
+              (l) => {'url': l.url, 'description': l.description},
+            )
             .toList(),
       );
     }
@@ -34,7 +36,7 @@ class HackathonRepositoryImpl implements HackathonRepository {
       await _dbHelper.insertHackathonDates(
         id,
         hackathon.timeline
-            .map(
+            .map<Map<String, dynamic>>(
               (d) => {
                 'date_val': d.date.toIso8601String(),
                 'description': d.description,
@@ -55,13 +57,15 @@ class HackathonRepositoryImpl implements HackathonRepository {
       await _dbHelper.updateHackathonLinks(
         hackathon.id!,
         hackathon.links
-            .map((l) => {'url': l.url, 'description': l.description})
+            .map<Map<String, dynamic>>(
+              (l) => {'url': l.url, 'description': l.description},
+            )
             .toList(),
       );
       await _dbHelper.updateHackathonDates(
         hackathon.id!,
         hackathon.timeline
-            .map(
+            .map<Map<String, dynamic>>(
               (d) => {
                 'date_val': d.date.toIso8601String(),
                 'description': d.description,
@@ -77,6 +81,11 @@ class HackathonRepositoryImpl implements HackathonRepository {
   @override
   Future<int> deleteHackathon(int id) async {
     return await _dbHelper.deleteHackathon(id);
+  }
+
+  @override
+  Future<List<String>> getDistinctLoginMails() async {
+    return await _dbHelper.getDistinctLoginMails();
   }
 
   Future<Hackathon> _fromMapWithDetails(Map<String, dynamic> map) async {
@@ -116,6 +125,7 @@ class HackathonRepositoryImpl implements HackathonRepository {
       techStack: map['tech_stack'],
       outcome: map['outcome'],
       projectLink: map['project_link'],
+      loginMail: map['login_mail'],
       links: links,
       timeline: timeline,
     );
@@ -137,6 +147,7 @@ class HackathonRepositoryImpl implements HackathonRepository {
       techStack: map['tech_stack'],
       outcome: map['outcome'],
       projectLink: map['project_link'],
+      loginMail: map['login_mail'],
     );
   }
 
@@ -152,6 +163,7 @@ class HackathonRepositoryImpl implements HackathonRepository {
       'tech_stack': hackathon.techStack,
       'outcome': hackathon.outcome,
       'project_link': hackathon.projectLink,
+      'login_mail': hackathon.loginMail,
     };
   }
 }

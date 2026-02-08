@@ -5,6 +5,10 @@ import '../../domain/entities/course.dart';
 import '../../domain/entities/course_link.dart';
 import '../../domain/entities/course_date.dart';
 import '../providers/course_provider.dart';
+// Import reusable widgets
+import '../widgets/form/dynamic_link_section.dart';
+import '../widgets/form/dynamic_timeline_section.dart';
+import '../widgets/form/login_mail_autocomplete.dart';
 
 class CourseAddEditScreen extends StatefulWidget {
   final Course? course;
@@ -21,6 +25,7 @@ class _CourseAddEditScreenState extends State<CourseAddEditScreen> {
   late TextEditingController
   _sourceNameController; // For Site Name, Platform Name, or Source
   late TextEditingController _channelNameController; // For YouTube Channel etc.
+  late TextEditingController _loginMailController;
   late TextEditingController _descriptionController;
 
   CourseType _type = CourseType.site;
@@ -41,9 +46,23 @@ class _CourseAddEditScreenState extends State<CourseAddEditScreen> {
     _channelNameController = TextEditingController(
       text: widget.course?.channelName ?? '',
     );
+    _loginMailController = TextEditingController(
+      text: widget.course?.loginMail ?? '',
+    );
     _descriptionController = TextEditingController(
       text: widget.course?.description ?? '',
     );
+
+    // Load suggestions
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      Provider.of<CourseProvider>(
+        context,
+        listen: false,
+      ).loadDistinctLoginMails();
+      if (_type == CourseType.site) {
+        Provider.of<CourseProvider>(context, listen: false).loadDistinctSites();
+      }
+    });
 
     if (widget.course != null) {
       _type = widget.course!.type;
@@ -59,6 +78,7 @@ class _CourseAddEditScreenState extends State<CourseAddEditScreen> {
     _titleController.dispose();
     _sourceNameController.dispose();
     _channelNameController.dispose();
+    _loginMailController.dispose();
     _descriptionController.dispose();
     super.dispose();
   }
@@ -73,121 +93,6 @@ class _CourseAddEditScreenState extends State<CourseAddEditScreen> {
     if (picked != null) {
       onPicked(picked);
     }
-  }
-
-  void _addLink() {
-    final urlController = TextEditingController();
-    final descController = TextEditingController();
-
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Add Link'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: urlController,
-              decoration: const InputDecoration(labelText: 'URL'),
-            ),
-            TextField(
-              controller: descController,
-              decoration: const InputDecoration(labelText: 'Description'),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () {
-              if (urlController.text.isNotEmpty) {
-                setState(() {
-                  _links.add(
-                    CourseLink(
-                      url: urlController.text,
-                      description: descController.text.isEmpty
-                          ? 'Link'
-                          : descController.text,
-                    ),
-                  );
-                });
-                Navigator.pop(context);
-              }
-            },
-            child: const Text('Add'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _addTimelineEvent() {
-    final descController = TextEditingController();
-    DateTime selectedDate = DateTime.now();
-
-    showDialog(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) {
-          return AlertDialog(
-            title: const Text('Add Timeline Event'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                ListTile(
-                  title: Text(DateFormat.yMMMd().format(selectedDate)),
-                  trailing: const Icon(Icons.calendar_today),
-                  onTap: () async {
-                    final picked = await showDatePicker(
-                      context: context,
-                      initialDate: selectedDate,
-                      firstDate: DateTime(2020),
-                      lastDate: DateTime(2030),
-                    );
-                    if (picked != null) {
-                      setDialogState(() => selectedDate = picked);
-                    }
-                  },
-                ),
-                TextField(
-                  controller: descController,
-                  decoration: const InputDecoration(
-                    labelText: 'Description (e.g., Started module 1)',
-                  ),
-                ),
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('Cancel'),
-              ),
-              TextButton(
-                onPressed: () {
-                  if (descController.text.isNotEmpty) {
-                    setState(() {
-                      _timeline.add(
-                        CourseDate(
-                          date: selectedDate,
-                          description: descController.text,
-                        ),
-                      );
-                      // Sort timeline by date
-                      _timeline.sort((a, b) => a.date.compareTo(b.date));
-                    });
-                    Navigator.pop(context);
-                  }
-                },
-                child: const Text('Add'),
-              ),
-            ],
-          );
-        },
-      ),
-    );
   }
 
   void _saveCourse() {
@@ -207,6 +112,9 @@ class _CourseAddEditScreenState extends State<CourseAddEditScreen> {
         sourceName: _sourceNameController.text,
         channelName: (_type == CourseType.platform)
             ? _channelNameController.text
+            : null,
+        loginMail: _loginMailController.text.isNotEmpty
+            ? _loginMailController.text
             : null,
         startDate: _startDate,
         progressPercent: widget.course?.progressPercent ?? 0.0,
@@ -403,6 +311,17 @@ class _CourseAddEditScreenState extends State<CourseAddEditScreen> {
               ),
               const SizedBox(height: 16),
 
+              // Login Mail Autocomplete
+              Consumer<CourseProvider>(
+                builder: (context, provider, child) {
+                  return LoginMailAutocomplete(
+                    controller: _loginMailController,
+                    distinctLoginMails: provider.distinctLoginMails,
+                  );
+                },
+              ),
+              const SizedBox(height: 16),
+
               TextFormField(
                 controller: _descriptionController,
                 decoration: const InputDecoration(
@@ -414,87 +333,62 @@ class _CourseAddEditScreenState extends State<CourseAddEditScreen> {
               const SizedBox(height: 24),
 
               // Multiple Links Section
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text(
-                    'Links',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                  ),
-                  IconButton(
-                    icon: const Icon(
-                      Icons.add_circle,
-                      color: Colors.tealAccent,
+              DynamicLinkSection<CourseLink>(
+                title: 'Links',
+                items: _links,
+                onAdd: (url, desc) {
+                  setState(() {
+                    _links.add(CourseLink(url: url, description: desc));
+                  });
+                },
+                itemBuilder: (context, link, index) {
+                  return ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(
+                      link.url,
+                      style: const TextStyle(color: Colors.blue),
                     ),
-                    onPressed: _addLink,
-                  ),
-                ],
+                    subtitle: Text(link.description),
+                    trailing: IconButton(
+                      icon: const Icon(
+                        Icons.remove_circle_outline,
+                        color: Colors.red,
+                      ),
+                      onPressed: () => setState(() => _links.removeAt(index)),
+                    ),
+                  );
+                },
               ),
-              if (_links.isEmpty)
-                const Text(
-                  'No links added.',
-                  style: TextStyle(color: Colors.grey),
-                ),
-              ..._links.asMap().entries.map((entry) {
-                final index = entry.key;
-                final link = entry.value;
-                return ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: Text(
-                    link.url,
-                    style: const TextStyle(color: Colors.blue),
-                  ),
-                  subtitle: Text(link.description),
-                  trailing: IconButton(
-                    icon: const Icon(
-                      Icons.remove_circle_outline,
-                      color: Colors.red,
-                    ),
-                    onPressed: () => setState(() => _links.removeAt(index)),
-                  ),
-                );
-              }),
               const Divider(),
 
               // Timeline/Dates Section
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text(
-                    'Timeline',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                  ),
-                  IconButton(
-                    icon: const Icon(
-                      Icons.add_circle,
-                      color: Colors.tealAccent,
+              DynamicTimelineSection<CourseDate>(
+                title: 'Timeline',
+                items: _timeline,
+                onAdd: (date, desc) {
+                  setState(() {
+                    _timeline.add(CourseDate(date: date, description: desc));
+                    // Sort timeline by date
+                    _timeline.sort((a, b) => a.date.compareTo(b.date));
+                  });
+                },
+                itemBuilder: (context, event, index) {
+                  return ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.circle, size: 12),
+                    title: Text(DateFormat.yMMMd().format(event.date)),
+                    subtitle: Text(event.description),
+                    trailing: IconButton(
+                      icon: const Icon(
+                        Icons.remove_circle_outline,
+                        color: Colors.red,
+                      ),
+                      onPressed: () =>
+                          setState(() => _timeline.removeAt(index)),
                     ),
-                    onPressed: _addTimelineEvent,
-                  ),
-                ],
+                  );
+                },
               ),
-              if (_timeline.isEmpty)
-                const Text(
-                  'No timeline events.',
-                  style: TextStyle(color: Colors.grey),
-                ),
-              ..._timeline.asMap().entries.map((entry) {
-                final index = entry.key;
-                final event = entry.value;
-                return ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: const Icon(Icons.circle, size: 12),
-                  title: Text(DateFormat.yMMMd().format(event.date)),
-                  subtitle: Text(event.description),
-                  trailing: IconButton(
-                    icon: const Icon(
-                      Icons.remove_circle_outline,
-                      color: Colors.red,
-                    ),
-                    onPressed: () => setState(() => _timeline.removeAt(index)),
-                  ),
-                );
-              }),
               const SizedBox(height: 50),
             ],
           ),

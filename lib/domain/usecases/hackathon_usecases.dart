@@ -26,3 +26,9 @@ class DeleteHackathon {
   DeleteHackathon(this.repository);
   Future<int> call(int id) async => await repository.deleteHackathon(id);
 }
+
+class GetHackathonDistinctLoginMails {
+  final HackathonRepository repository;
+  GetHackathonDistinctLoginMails(this.repository);
+  Future<List<String>> call() async => await repository.getDistinctLoginMails();
+}

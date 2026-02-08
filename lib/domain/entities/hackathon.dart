@@ -13,6 +13,7 @@ class Hackathon extends Equatable {
   final String? techStack;
   final String? outcome;
   final String? projectLink;
+  final String? loginMail;
   final List<EventLink> links;
   final List<EventDate> timeline;
 
@@ -27,6 +28,7 @@ class Hackathon extends Equatable {
     this.techStack,
     this.outcome,
     this.projectLink,
+    this.loginMail,
     this.links = const [],
     this.timeline = const [],
   });
@@ -43,6 +45,7 @@ class Hackathon extends Equatable {
     techStack,
     outcome,
     projectLink,
+    loginMail,
     links,
     timeline,
   ];

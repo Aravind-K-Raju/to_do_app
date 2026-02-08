@@ -5,4 +5,5 @@ abstract class HackathonRepository {
   Future<int> createHackathon(Hackathon hackathon);
   Future<int> updateHackathon(Hackathon hackathon);
   Future<int> deleteHackathon(int id);
+  Future<List<String>> getDistinctLoginMails();
 }

@@ -16,6 +16,7 @@ class Course extends Equatable {
   final DateTime? completionDate;
   final double progressPercent;
   final String status; // 'planned', 'ongoing', 'completed'
+  final String? loginMail;
   final List<CourseLink> links;
   final List<CourseDate> timeline;
 
@@ -30,6 +31,7 @@ class Course extends Equatable {
     this.completionDate,
     required this.progressPercent,
     required this.status,
+    this.loginMail,
     this.links = const [],
     this.timeline = const [],
   });
@@ -50,6 +52,7 @@ class Course extends Equatable {
     completionDate,
     progressPercent,
     status,
+    loginMail,
     links,
     timeline,
   ];

@@ -7,6 +7,10 @@ import '../../domain/entities/hackathon.dart';
 import '../../domain/entities/event_link.dart';
 import '../../domain/entities/event_date.dart';
 import '../providers/hackathon_provider.dart';
+// Import reusable widgets
+import '../widgets/form/dynamic_link_section.dart';
+import '../widgets/form/dynamic_timeline_section.dart';
+import '../widgets/form/login_mail_autocomplete.dart';
 
 class HackathonAddEditScreen extends StatefulWidget {
   final Hackathon? hackathon;
@@ -26,6 +30,7 @@ class _HackathonAddEditScreenState extends State<HackathonAddEditScreen> {
   late TextEditingController _outcomeController;
   late TextEditingController
   _linkController; // Keeping original simple link as 'Project Link'
+  late TextEditingController _loginMailController;
 
   DateTime _startDate = DateTime.now();
   DateTime? _endDate;
@@ -34,7 +39,7 @@ class _HackathonAddEditScreenState extends State<HackathonAddEditScreen> {
   List<EventLink> _links = [];
   List<EventDate> _timeline = [];
 
-  late StreamSubscription _intentDataStreamSubscription;
+  StreamSubscription? _intentDataStreamSubscription;
 
   @override
   void initState() {
@@ -55,6 +60,16 @@ class _HackathonAddEditScreenState extends State<HackathonAddEditScreen> {
     _linkController = TextEditingController(
       text: widget.hackathon?.projectLink ?? '',
     );
+    _loginMailController = TextEditingController(
+      text: widget.hackathon?.loginMail ?? '',
+    );
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      Provider.of<HackathonProvider>(
+        context,
+        listen: false,
+      ).loadDistinctLoginMails();
+    });
 
     if (widget.hackathon != null) {
       _startDate = widget.hackathon!.startDate;
@@ -69,23 +84,21 @@ class _HackathonAddEditScreenState extends State<HackathonAddEditScreen> {
 
   void _initSharingListener() {
     // For sharing or opening app from other apps
-    _intentDataStreamSubscription = ReceiveSharingIntent.instance.getMediaStream().listen(
-      (List<SharedMediaFile> value) {
-        if (value.isNotEmpty && value.first.path.isNotEmpty) {
-          setState(() {
-            // Assuming the shared text is in the path or we might need another API for pure text
-            // Note: for text/plain, the path usually contains the text in some versions,
-            // or we check 'message' if available?
-            // The plugin documentation says for text, it returns a file with path as the text?
-            // Actually, let's append it to description
-            _descriptionController.text = value.first.path;
-          });
-        }
-      },
-      onError: (err) {
-        debugPrint("getIntentDataStream error: $err");
-      },
-    );
+    _intentDataStreamSubscription = ReceiveSharingIntent.instance
+        .getMediaStream()
+        .listen(
+          (List<SharedMediaFile> value) {
+            if (value.isNotEmpty && value.first.path.isNotEmpty) {
+              setState(() {
+                // Assuming the shared text is in the path
+                _descriptionController.text = value.first.path;
+              });
+            }
+          },
+          onError: (err) {
+            debugPrint("getIntentDataStream error: $err");
+          },
+        );
 
     // Get the media from the intent that started the app
     ReceiveSharingIntent.instance.getInitialMedia().then((
@@ -107,7 +120,8 @@ class _HackathonAddEditScreenState extends State<HackathonAddEditScreen> {
     _techStackController.dispose();
     _outcomeController.dispose();
     _linkController.dispose();
-    _intentDataStreamSubscription.cancel();
+    _loginMailController.dispose();
+    _intentDataStreamSubscription?.cancel();
     super.dispose();
   }
 
@@ -129,118 +143,6 @@ class _HackathonAddEditScreenState extends State<HackathonAddEditScreen> {
     }
   }
 
-  void _addLink() {
-    final urlController = TextEditingController();
-    final descController = TextEditingController();
-
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Add Related Link'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: urlController,
-              decoration: const InputDecoration(labelText: 'URL'),
-            ),
-            TextField(
-              controller: descController,
-              decoration: const InputDecoration(labelText: 'Description'),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () {
-              if (urlController.text.isNotEmpty) {
-                setState(() {
-                  _links.add(
-                    EventLink(
-                      url: urlController.text,
-                      description: descController.text.isEmpty
-                          ? 'Link'
-                          : descController.text,
-                    ),
-                  );
-                });
-                Navigator.pop(context);
-              }
-            },
-            child: const Text('Add'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _addTimelineEvent() {
-    final descController = TextEditingController();
-    DateTime selectedDate = DateTime.now();
-
-    showDialog(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) {
-          return AlertDialog(
-            title: const Text('Add Timeline Event'),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                ListTile(
-                  title: Text(DateFormat.yMMMd().format(selectedDate)),
-                  trailing: const Icon(Icons.calendar_today),
-                  onTap: () async {
-                    final picked = await showDatePicker(
-                      context: context,
-                      initialDate: selectedDate,
-                      firstDate: DateTime(2020),
-                      lastDate: DateTime(2030),
-                    );
-                    if (picked != null) {
-                      setDialogState(() => selectedDate = picked);
-                    }
-                  },
-                ),
-                TextField(
-                  controller: descController,
-                  decoration: const InputDecoration(labelText: 'Description'),
-                ),
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: const Text('Cancel'),
-              ),
-              TextButton(
-                onPressed: () {
-                  if (descController.text.isNotEmpty) {
-                    setState(() {
-                      _timeline.add(
-                        EventDate(
-                          date: selectedDate,
-                          description: descController.text,
-                        ),
-                      );
-                      _timeline.sort((a, b) => a.date.compareTo(b.date));
-                    });
-                    Navigator.pop(context);
-                  }
-                },
-                child: const Text('Add'),
-              ),
-            ],
-          );
-        },
-      ),
-    );
-  }
-
   void _save() {
     if (_formKey.currentState!.validate()) {
       final newHackathon = Hackathon(
@@ -253,6 +155,9 @@ class _HackathonAddEditScreenState extends State<HackathonAddEditScreen> {
         techStack: _techStackController.text,
         outcome: _outcomeController.text,
         projectLink: _linkController.text,
+        loginMail: _loginMailController.text.isNotEmpty
+            ? _loginMailController.text
+            : null,
         links: _links,
         timeline: _timeline,
       );
@@ -296,6 +201,16 @@ class _HackathonAddEditScreenState extends State<HackathonAddEditScreen> {
                   labelText: 'Theme / Topic',
                   border: OutlineInputBorder(),
                 ),
+              ),
+              const SizedBox(height: 16),
+
+              Consumer<HackathonProvider>(
+                builder: (context, provider, child) {
+                  return LoginMailAutocomplete(
+                    controller: _loginMailController,
+                    distinctLoginMails: provider.distinctLoginMails,
+                  );
+                },
               ),
               const SizedBox(height: 16),
 
@@ -373,87 +288,61 @@ class _HackathonAddEditScreenState extends State<HackathonAddEditScreen> {
               const SizedBox(height: 24),
 
               // Multiple Links Section
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text(
-                    'Additional Links',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                  ),
-                  IconButton(
-                    icon: const Icon(
-                      Icons.add_circle,
-                      color: Colors.tealAccent,
+              DynamicLinkSection<EventLink>(
+                title: 'Additional Links',
+                items: _links,
+                onAdd: (url, desc) {
+                  setState(() {
+                    _links.add(EventLink(url: url, description: desc));
+                  });
+                },
+                itemBuilder: (context, link, index) {
+                  return ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: Text(
+                      link.url,
+                      style: const TextStyle(color: Colors.blue),
                     ),
-                    onPressed: _addLink,
-                  ),
-                ],
+                    subtitle: Text(link.description),
+                    trailing: IconButton(
+                      icon: const Icon(
+                        Icons.remove_circle_outline,
+                        color: Colors.red,
+                      ),
+                      onPressed: () => setState(() => _links.removeAt(index)),
+                    ),
+                  );
+                },
               ),
-              if (_links.isEmpty)
-                const Text(
-                  'No additional links.',
-                  style: TextStyle(color: Colors.grey),
-                ),
-              ..._links.asMap().entries.map((entry) {
-                final index = entry.key;
-                final link = entry.value;
-                return ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: Text(
-                    link.url,
-                    style: const TextStyle(color: Colors.blue),
-                  ),
-                  subtitle: Text(link.description),
-                  trailing: IconButton(
-                    icon: const Icon(
-                      Icons.remove_circle_outline,
-                      color: Colors.red,
-                    ),
-                    onPressed: () => setState(() => _links.removeAt(index)),
-                  ),
-                );
-              }),
               const Divider(),
 
               // Timeline Section
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text(
-                    'Timeline',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                  ),
-                  IconButton(
-                    icon: const Icon(
-                      Icons.add_circle,
-                      color: Colors.tealAccent,
+              DynamicTimelineSection<EventDate>(
+                title: 'Timeline',
+                items: _timeline,
+                onAdd: (date, desc) {
+                  setState(() {
+                    _timeline.add(EventDate(date: date, description: desc));
+                    _timeline.sort((a, b) => a.date.compareTo(b.date));
+                  });
+                },
+                itemBuilder: (context, event, index) {
+                  return ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: const Icon(Icons.circle, size: 12),
+                    title: Text(DateFormat.yMMMd().format(event.date)),
+                    subtitle: Text(event.description),
+                    trailing: IconButton(
+                      icon: const Icon(
+                        Icons.remove_circle_outline,
+                        color: Colors.red,
+                      ),
+                      onPressed: () =>
+                          setState(() => _timeline.removeAt(index)),
                     ),
-                    onPressed: _addTimelineEvent,
-                  ),
-                ],
+                  );
+                },
               ),
-              if (_timeline.isEmpty)
-                const Text(
-                  'No timeline events.',
-                  style: TextStyle(color: Colors.grey),
-                ),
-              ..._timeline.asMap().entries.map((entry) {
-                final index = entry.key;
-                final event = entry.value;
-                return ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  leading: const Icon(Icons.circle, size: 12),
-                  title: Text(DateFormat.yMMMd().format(event.date)),
-                  subtitle: Text(event.description),
-                  trailing: IconButton(
-                    icon: const Icon(
-                      Icons.remove_circle_outline,
-                      color: Colors.red,
-                    ),
-                    onPressed: () => setState(() => _timeline.removeAt(index)),
-                  ),
-                );
-              }),
               const SizedBox(height: 50),
             ],
           ),

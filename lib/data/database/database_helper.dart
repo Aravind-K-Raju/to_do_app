@@ -20,7 +20,7 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 4,
+      version: 5,
       onCreate: _createDB,
       onUpgrade: _upgradeDB,
     );
@@ -35,6 +35,9 @@ class DatabaseHelper {
     }
     if (oldVersion < 4) {
       await _upgradeToV4(db);
+    }
+    if (oldVersion < 5) {
+      await _upgradeToV5(db);
     }
   }
 
@@ -155,7 +158,8 @@ class DatabaseHelper {
         status $textType,
         type $textType,
         source_name $textType,
-        channel_name $textNullable
+        channel_name $textNullable,
+        login_mail $textNullable
       )
     ''');
 
@@ -196,6 +200,8 @@ class DatabaseHelper {
 
     // Hackathons Table
     await _createHackathonsTable(db);
+    // Explicitly add login_mail to hackathons for fresh installs (V5)
+    await db.execute('ALTER TABLE hackathons ADD COLUMN login_mail TEXT');
 
     // New V3 Tables
     await _createCourseLinksTable(db);
@@ -212,7 +218,9 @@ class DatabaseHelper {
   Future<int> createCourse(Map<String, dynamic> course) async {
     final db = await instance.database;
     return await db.insert('courses', course);
-  }
+  } 
+
+  
 
   Future<Map<String, dynamic>?> getCourse(int id) async {
     final db = await instance.database;
@@ -497,6 +505,12 @@ class DatabaseHelper {
     );
   }
 
+  Future<void> _upgradeToV5(Database db) async {
+    // Add login_mail column to courses and hackathons tables
+    await db.execute('ALTER TABLE courses ADD COLUMN login_mail TEXT');
+    await db.execute('ALTER TABLE hackathons ADD COLUMN login_mail TEXT');
+  }
+
   // Distinct Sites
   Future<List<String>> getDistinctSites() async {
     final db = await instance.database;
@@ -504,5 +518,18 @@ class DatabaseHelper {
       'SELECT DISTINCT source_name FROM courses WHERE type = "site" ORDER BY source_name ASC',
     );
     return result.map((row) => row['source_name'] as String).toList();
+  }
+
+  // Distinct Login Mails (aggregated from Courses and Hackathons)
+  Future<List<String>> getDistinctLoginMails() async {
+    final db = await instance.database;
+    // Union of mails from both tables
+    final result = await db.rawQuery('''
+      SELECT DISTINCT login_mail FROM courses WHERE login_mail IS NOT NULL AND login_mail != ''
+      UNION
+      SELECT DISTINCT login_mail FROM hackathons WHERE login_mail IS NOT NULL AND login_mail != ''
+      ORDER BY login_mail ASC
+    ''');
+    return result.map((row) => row['login_mail'] as String).toList();
   }
 }

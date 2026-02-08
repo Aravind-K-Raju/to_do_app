@@ -33,7 +33,9 @@ class CourseRepositoryImpl implements CourseRepository {
       await _dbHelper.insertCourseLinks(
         id,
         course.links
-            .map((l) => {'url': l.url, 'description': l.description})
+            .map<Map<String, dynamic>>(
+              (l) => {'url': l.url, 'description': l.description},
+            )
             .toList(),
       );
     }
@@ -41,7 +43,7 @@ class CourseRepositoryImpl implements CourseRepository {
       await _dbHelper.insertCourseDates(
         id,
         course.timeline
-            .map(
+            .map<Map<String, dynamic>>(
               (d) => {
                 'date_val': d.date.toIso8601String(),
                 'description': d.description,
@@ -60,13 +62,15 @@ class CourseRepositoryImpl implements CourseRepository {
       await _dbHelper.updateCourseLinks(
         course.id!,
         course.links
-            .map((l) => {'url': l.url, 'description': l.description})
+            .map<Map<String, dynamic>>(
+              (l) => {'url': l.url, 'description': l.description},
+            )
             .toList(),
       );
       await _dbHelper.updateCourseDates(
         course.id!,
         course.timeline
-            .map(
+            .map<Map<String, dynamic>>(
               (d) => {
                 'date_val': d.date.toIso8601String(),
                 'description': d.description,
@@ -86,6 +90,11 @@ class CourseRepositoryImpl implements CourseRepository {
   @override
   Future<List<String>> getDistinctSites() async {
     return await _dbHelper.getDistinctSites();
+  }
+
+  @override
+  Future<List<String>> getDistinctLoginMails() async {
+    return await _dbHelper.getDistinctLoginMails();
   }
 
   // Mapper methods
@@ -130,6 +139,7 @@ class CourseRepositoryImpl implements CourseRepository {
           : null,
       progressPercent: map['progress_percent'],
       status: map['status'],
+      loginMail: map['login_mail'],
       links: links,
       timeline: timeline,
     );
@@ -157,6 +167,7 @@ class CourseRepositoryImpl implements CourseRepository {
       'completion_date': course.completionDate?.toIso8601String(),
       'progress_percent': course.progressPercent,
       'status': course.status,
+      'login_mail': course.loginMail,
     };
   }
 }

@@ -5,6 +5,7 @@ import '../../domain/usecases/create_course.dart';
 import '../../domain/usecases/update_course.dart';
 import '../../domain/usecases/delete_course.dart';
 import '../../domain/usecases/get_distinct_sites.dart';
+import '../../domain/usecases/get_distinct_login_mails.dart';
 
 class CourseProvider extends ChangeNotifier {
   final GetCourses getCourses;
@@ -12,6 +13,7 @@ class CourseProvider extends ChangeNotifier {
   final UpdateCourse updateCourse;
   final DeleteCourse deleteCourse;
   final GetDistinctSites getDistinctSites;
+  final GetDistinctLoginMails getDistinctLoginMails;
 
   CourseProvider({
     required this.getCourses,
@@ -19,6 +21,7 @@ class CourseProvider extends ChangeNotifier {
     required this.updateCourse,
     required this.deleteCourse,
     required this.getDistinctSites,
+    required this.getDistinctLoginMails,
   });
 
   List<Course> _courses = [];
@@ -29,14 +32,24 @@ class CourseProvider extends ChangeNotifier {
   List<String> _distinctSites = [];
   List<String> get distinctSites => _distinctSites;
 
+  List<String> _distinctLoginMails = [];
+  List<String> get distinctLoginMails => _distinctLoginMails;
+
   Future<void> loadCourses() async {
     _isLoading = true;
     notifyListeners();
     try {
-      _courses = await getCourses();
-      await loadDistinctSites();
+      final results = await Future.wait([
+        getCourses(),
+        getDistinctSites(),
+        getDistinctLoginMails(),
+      ]);
+
+      _courses = results[0] as List<Course>;
+      _distinctSites = results[1] as List<String>;
+      _distinctLoginMails = results[2] as List<String>;
     } catch (e) {
-      debugPrint('Error loading courses: $e');
+      debugPrint('Error loading courses data: $e');
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -49,6 +62,15 @@ class CourseProvider extends ChangeNotifier {
       notifyListeners();
     } catch (e) {
       debugPrint('Error loading distinct sites: $e');
+    }
+  }
+
+  Future<void> loadDistinctLoginMails() async {
+    try {
+      _distinctLoginMails = await getDistinctLoginMails();
+      notifyListeners();
+    } catch (e) {
+      debugPrint('Error loading distinct login mails: $e');
     }
   }
 

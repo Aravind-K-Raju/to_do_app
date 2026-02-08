@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/course_provider.dart';
+import '../widgets/items/course_list_item.dart';
 import 'course_add_edit_screen.dart';
 import 'course_detail_screen.dart';
 
@@ -40,27 +41,16 @@ class _CourseListScreenState extends State<CourseListScreen> {
             itemCount: provider.courses.length,
             itemBuilder: (context, index) {
               final course = provider.courses[index];
-              return Card(
-                margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                child: ListTile(
-                  title: Text(
-                    course.title,
-                    style: const TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                  subtitle: Text('${course.platform} • ${course.status}'),
-                  trailing: CircularProgressIndicator(
-                    value: course.progressPercent / 100,
-                    backgroundColor: Colors.grey[800],
-                  ),
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => CourseDetailScreen(course: course),
-                      ),
-                    );
-                  },
-                ),
+              return CourseListItem(
+                course: course,
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => CourseDetailScreen(course: course),
+                    ),
+                  );
+                },
               );
             },
           );
