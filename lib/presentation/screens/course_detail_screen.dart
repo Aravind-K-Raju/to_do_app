@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../domain/entities/course.dart';
 import '../providers/course_provider.dart';
 import 'course_add_edit_screen.dart';
@@ -9,6 +10,17 @@ class CourseDetailScreen extends StatelessWidget {
   final Course course;
 
   const CourseDetailScreen({super.key, required this.course});
+
+  Future<void> _launchUrl(BuildContext context, String urlString) async {
+    final Uri url = Uri.parse(urlString);
+    if (!await launchUrl(url)) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Could not launch $urlString')));
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -134,9 +146,7 @@ class CourseDetailScreen extends StatelessWidget {
                         style: const TextStyle(fontWeight: FontWeight.w500),
                       ),
                       InkWell(
-                        onTap: () {
-                          // TODO: Implement URL launching
-                        },
+                        onTap: () => _launchUrl(context, link.url),
                         child: Text(
                           link.url,
                           style: const TextStyle(
@@ -173,10 +183,17 @@ class CourseDetailScreen extends StatelessWidget {
                             size: 12,
                             color: Colors.blue,
                           ),
+                          // The following block replaces the original Container for the timeline line
+                          // Assuming 'color' is a Color variable defined in the scope,
+                          // and 'withValues' is an extension method on Color.
+                          // If 'color' is not defined, this will cause a compilation error.
+                          // For now, I'm assuming 'color' should be Colors.grey as it was previously.
                           Container(
                             width: 2,
                             height: 40,
-                            color: Colors.grey.withOpacity(0.3),
+                            color: Colors.grey.withValues(
+                              alpha: 0.3,
+                            ), // Replaced withOpacity with withValues
                           ),
                         ],
                       ),

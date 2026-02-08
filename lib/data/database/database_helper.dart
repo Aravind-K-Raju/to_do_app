@@ -20,7 +20,7 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 5,
+      version: 6,
       onCreate: _createDB,
       onUpgrade: _upgradeDB,
     );
@@ -38,6 +38,9 @@ class DatabaseHelper {
     }
     if (oldVersion < 5) {
       await _upgradeToV5(db);
+    }
+    if (oldVersion < 6) {
+      await _upgradeToV6(db);
     }
   }
 
@@ -187,16 +190,7 @@ class DatabaseHelper {
       )
     ''');
 
-    // Study Sessions Table
-    await db.execute('''
-      CREATE TABLE study_sessions (
-        id $idType,
-        course_id $intType,
-        start_time $textType,
-        duration_minutes $intType,
-        FOREIGN KEY (course_id) REFERENCES courses (id) ON DELETE CASCADE
-      )
-    ''');
+    // Remove Study Sessions Table creation as it is deprecated
 
     // Hackathons Table
     await _createHackathonsTable(db);
@@ -210,6 +204,9 @@ class DatabaseHelper {
     // New V4 Tables
     await _createHackathonLinksTable(db);
     await _createHackathonDatesTable(db);
+
+    // Assignments Table (V6)
+    await _createAssignmentsTable(db);
   }
 
   // ---------------- CRUD Operations ----------------
@@ -218,9 +215,7 @@ class DatabaseHelper {
   Future<int> createCourse(Map<String, dynamic> course) async {
     final db = await instance.database;
     return await db.insert('courses', course);
-  } 
-
-  
+  }
 
   Future<Map<String, dynamic>?> getCourse(int id) async {
     final db = await instance.database;
@@ -310,23 +305,62 @@ class DatabaseHelper {
     return await db.delete('tasks', where: 'id = ?', whereArgs: [id]);
   }
 
-  // --- Study Sessions ---
-  Future<int> startSession(Map<String, dynamic> session) async {
-    final db = await instance.database;
-    return await db.insert('study_sessions', session);
+  // --- Assignments (V6) ---
+
+  Future<void> _upgradeToV5(Database db) async {
+    // Add login_mail column to courses and hackathons tables
+    await db.execute('ALTER TABLE courses ADD COLUMN login_mail TEXT');
+    await db.execute('ALTER TABLE hackathons ADD COLUMN login_mail TEXT');
   }
 
-  Future<List<Map<String, dynamic>>> getSessionsForCourse(int courseId) async {
+  Future<void> _upgradeToV6(Database db) async {
+    await _createAssignmentsTable(db);
+  }
+
+  Future<void> _createAssignmentsTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE assignments (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        title TEXT NOT NULL,
+        description TEXT,
+        subject TEXT,
+        type TEXT NOT NULL,
+        due_date INTEGER NOT NULL,
+        submission_date INTEGER,
+        is_completed INTEGER NOT NULL
+      )
+    ''');
+  }
+
+  Future<int> createAssignment(Map<String, dynamic> assignment) async {
+    final db = await instance.database;
+    return await db.insert('assignments', assignment);
+  }
+
+  Future<List<Map<String, dynamic>>> getAllAssignments() async {
     final db = await instance.database;
     return await db.query(
-      'study_sessions',
-      where: 'course_id = ?',
-      whereArgs: [courseId],
-      orderBy: 'start_time DESC',
+      'assignments',
+      orderBy: 'is_completed ASC, due_date ASC',
     );
   }
 
-  // --- Hackathons ---
+  Future<int> updateAssignment(Map<String, dynamic> assignment) async {
+    final db = await instance.database;
+    return await db.update(
+      'assignments',
+      assignment,
+      where: 'id = ?',
+      whereArgs: [assignment['id']],
+    );
+  }
+
+  Future<int> deleteAssignment(int id) async {
+    final db = await instance.database;
+    return await db.delete('assignments', where: 'id = ?', whereArgs: [id]);
+  }
+
+  // Hackathons (Keeping existing methods)
   Future<int> createHackathon(Map<String, dynamic> hackathon) async {
     final db = await instance.database;
     return await db.insert('hackathons', hackathon);
@@ -503,12 +537,6 @@ class DatabaseHelper {
       where: 'hackathon_id = ?',
       whereArgs: [hackathonId],
     );
-  }
-
-  Future<void> _upgradeToV5(Database db) async {
-    // Add login_mail column to courses and hackathons tables
-    await db.execute('ALTER TABLE courses ADD COLUMN login_mail TEXT');
-    await db.execute('ALTER TABLE hackathons ADD COLUMN login_mail TEXT');
   }
 
   // Distinct Sites

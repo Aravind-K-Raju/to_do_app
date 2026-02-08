@@ -2,6 +2,7 @@ import '../../domain/entities/hackathon.dart';
 import '../../domain/entities/event_link.dart';
 import '../../domain/entities/event_date.dart';
 import '../../domain/repositories/hackathon_repository.dart';
+
 import '../database/database_helper.dart';
 
 class HackathonRepositoryImpl implements HackathonRepository {
@@ -9,12 +10,63 @@ class HackathonRepositoryImpl implements HackathonRepository {
 
   @override
   Future<List<Hackathon>> getHackathons() async {
+    final db = await _dbHelper.database;
     final result = await _dbHelper.getAllHackathons();
-    final List<Hackathon> list = [];
-    for (var map in result) {
-      list.add(await _fromMapWithDetails(map));
+
+    if (result.isEmpty) return [];
+
+    // Batch fetch related data
+    final allLinks = await db.query('hackathon_links');
+    final allDates = await db.query('hackathon_dates');
+
+    // Group by hackathon_id
+    final linksMap = <int, List<EventLink>>{};
+    for (var l in allLinks) {
+      final hId = l['hackathon_id'] as int;
+      if (!linksMap.containsKey(hId)) linksMap[hId] = [];
+      linksMap[hId]!.add(
+        EventLink(
+          id: l['id'] as int,
+          url: l['url'] as String,
+          description: l['description'] as String,
+        ),
+      );
     }
-    return list;
+
+    final datesMap = <int, List<EventDate>>{};
+    for (var d in allDates) {
+      final hId = d['hackathon_id'] as int;
+      if (!datesMap.containsKey(hId)) datesMap[hId] = [];
+      datesMap[hId]!.add(
+        EventDate(
+          id: d['id'] as int,
+          date: DateTime.parse(d['date_val'] as String),
+          description: d['description'] as String,
+        ),
+      );
+    }
+
+    // Map to entities
+    return result.map((map) {
+      final id = map['id'] as int;
+      return Hackathon(
+        id: id,
+        name: map['name'] as String,
+        theme: map['theme'] as String?,
+        description: map['description'] as String?,
+        startDate: DateTime.parse(map['start_date'] as String),
+        endDate: map['end_date'] != null
+            ? DateTime.parse(map['end_date'] as String)
+            : null,
+        teamSize: map['team_size'] as int?,
+        techStack: map['tech_stack'] as String?,
+        outcome: map['outcome'] as String?,
+        projectLink: map['project_link'] as String?,
+        loginMail: map['login_mail'] as String?,
+        links: linksMap[id] ?? [],
+        timeline: datesMap[id] ?? [],
+      );
+    }).toList();
   }
 
   @override
@@ -86,69 +138,6 @@ class HackathonRepositoryImpl implements HackathonRepository {
   @override
   Future<List<String>> getDistinctLoginMails() async {
     return await _dbHelper.getDistinctLoginMails();
-  }
-
-  Future<Hackathon> _fromMapWithDetails(Map<String, dynamic> map) async {
-    final id = map['id'] as int;
-
-    final linksData = await _dbHelper.getLinksForHackathon(id);
-    final datesData = await _dbHelper.getDatesForHackathon(id);
-
-    final links = linksData
-        .map(
-          (l) => EventLink(
-            id: l['id'],
-            url: l['url'],
-            description: l['description'],
-          ),
-        )
-        .toList();
-
-    final timeline = datesData
-        .map(
-          (d) => EventDate(
-            id: d['id'],
-            date: DateTime.parse(d['date_val']),
-            description: d['description'],
-          ),
-        )
-        .toList();
-
-    return Hackathon(
-      id: id,
-      name: map['name'],
-      theme: map['theme'],
-      description: map['description'],
-      startDate: DateTime.parse(map['start_date']),
-      endDate: map['end_date'] != null ? DateTime.parse(map['end_date']) : null,
-      teamSize: map['team_size'],
-      techStack: map['tech_stack'],
-      outcome: map['outcome'],
-      projectLink: map['project_link'],
-      loginMail: map['login_mail'],
-      links: links,
-      timeline: timeline,
-    );
-  }
-
-  // Keeping simplified _fromMap for internal use if needed, but prefer _fromMapWithDetails
-  Hackathon _fromMap(Map<String, dynamic> map) {
-    // This method is now less useful given we need async data.
-    // Ideally refactor getHackathons to use loop with await.
-    // See updated getHackathons above.
-    return Hackathon(
-      id: map['id'],
-      name: map['name'],
-      theme: map['theme'],
-      description: map['description'],
-      startDate: DateTime.parse(map['start_date']),
-      endDate: map['end_date'] != null ? DateTime.parse(map['end_date']) : null,
-      teamSize: map['team_size'],
-      techStack: map['tech_stack'],
-      outcome: map['outcome'],
-      projectLink: map['project_link'],
-      loginMail: map['login_mail'],
-    );
   }
 
   Map<String, dynamic> _toMap(Hackathon hackathon) {

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../domain/entities/hackathon.dart';
 import '../providers/hackathon_provider.dart';
 import 'hackathon_add_edit_screen.dart';
@@ -9,6 +10,17 @@ class HackathonDetailScreen extends StatelessWidget {
   final Hackathon hackathon;
 
   const HackathonDetailScreen({super.key, required this.hackathon});
+
+  Future<void> _launchUrl(BuildContext context, String urlString) async {
+    final Uri url = Uri.parse(urlString);
+    if (!await launchUrl(url)) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Could not launch $urlString')));
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -147,9 +159,7 @@ class HackathonDetailScreen extends StatelessWidget {
                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               ),
               InkWell(
-                onTap: () {
-                  // TODO: link launch
-                },
+                onTap: () => _launchUrl(context, hackathon.projectLink!),
                 child: Text(
                   hackathon.projectLink!,
                   style: const TextStyle(
@@ -179,9 +189,7 @@ class HackathonDetailScreen extends StatelessWidget {
                         style: const TextStyle(fontWeight: FontWeight.w500),
                       ),
                       InkWell(
-                        onTap: () {
-                          // TODO: Implement URL launching
-                        },
+                        onTap: () => _launchUrl(context, link.url),
                         child: Text(
                           link.url,
                           style: const TextStyle(
@@ -221,7 +229,7 @@ class HackathonDetailScreen extends StatelessWidget {
                           Container(
                             width: 2,
                             height: 40,
-                            color: Colors.grey.withOpacity(0.3),
+                            color: Colors.grey.withValues(alpha: 0.3),
                           ),
                         ],
                       ),

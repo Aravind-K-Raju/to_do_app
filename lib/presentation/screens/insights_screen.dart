@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/intelligence_provider.dart';
+import '../../domain/entities/insights_data.dart';
+import 'package:intl/intl.dart';
 
 class InsightsScreen extends StatefulWidget {
   const InsightsScreen({super.key});
@@ -31,30 +33,31 @@ class _InsightsScreenState extends State<InsightsScreen> {
             return const Center(child: CircularProgressIndicator());
           }
 
-          final stats = provider.currentStats;
+          final stats = provider.insightsData;
           if (stats == null) {
-            return const Center(child: Text('No data for today.'));
+            return const Center(child: Text('No data available.'));
           }
 
-          return Padding(
+          return SingleChildScrollView(
             padding: const EdgeInsets.all(16.0),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                _buildScoreCard(stats.productivityScore),
+                _buildProductivityScore(stats.overallScore),
                 const SizedBox(height: 24),
-                _buildStatRow('Tasks Completed', '${stats.tasksCompleted}'),
-                _buildStatRow('Tasks Pending', '${stats.tasksPending}'),
-                _buildStatRow('Study Time', '${stats.studyMinutes} min'),
-                const Divider(height: 32),
-                Text(
-                  _getMotivationalMessage(stats.productivityScore),
-                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    color: Colors.tealAccent,
-                    fontStyle: FontStyle.italic,
+                _buildStatsGrid(stats),
+                const SizedBox(height: 24),
+                ElevatedButton.icon(
+                  onPressed: () => _showPendingItems(context, stats),
+                  icon: const Icon(Icons.list_alt),
+                  label: const Text('View Pending Items & Active Courses'),
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
                   ),
-                  textAlign: TextAlign.center,
                 ),
+                const SizedBox(height: 24),
+                if (provider.currentStats != null)
+                  _buildDailyStats(provider.currentStats!),
               ],
             ),
           );
@@ -63,60 +66,242 @@ class _InsightsScreenState extends State<InsightsScreen> {
     );
   }
 
-  Widget _buildScoreCard(double score) {
+  Widget _buildProductivityScore(double score) {
+    return Center(
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          SizedBox(
+            width: 180,
+            height: 180,
+            child: CircularProgressIndicator(
+              value: score / 100,
+              strokeWidth: 16,
+              backgroundColor: Colors.grey[800],
+              color: _getScoreColor(score),
+            ),
+          ),
+          Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                score.toStringAsFixed(0),
+                style: TextStyle(
+                  fontSize: 48,
+                  fontWeight: FontWeight.bold,
+                  color: _getScoreColor(score),
+                ),
+              ),
+              const Text(
+                'Overall Score',
+                style: TextStyle(fontSize: 14, color: Colors.grey),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Color _getScoreColor(double score) {
+    if (score >= 80) return Colors.greenAccent;
+    if (score >= 50) return Colors.orangeAccent;
+    return Colors.redAccent;
+  }
+
+  Widget _buildStatsGrid(InsightsData stats) {
+    return GridView.count(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      crossAxisCount: 2,
+      childAspectRatio: 1.4,
+      mainAxisSpacing: 16,
+      crossAxisSpacing: 16,
+      children: [
+        _buildStatCard(
+          'Courses',
+          stats.completedCourses,
+          stats.totalCourses,
+          Colors.blueAccent,
+        ),
+        _buildStatCard(
+          'Tasks',
+          stats.completedTasks,
+          stats.totalTasks,
+          Colors.tealAccent,
+        ),
+        _buildStatCard(
+          'Assignments',
+          stats.completedAssignments,
+          stats.totalAssignments,
+          Colors.purpleAccent,
+        ),
+        _buildStatCard(
+          'Events',
+          stats.completedEvents,
+          stats.totalEvents,
+          Colors.orangeAccent,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildStatCard(String title, int completed, int total, Color color) {
+    double progress = total == 0 ? 0 : completed / total;
     return Container(
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white10,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.tealAccent.withValues(alpha: 0.3)),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
       ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Productivity Score',
-            style: TextStyle(fontSize: 16, color: Colors.grey),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            score.toStringAsFixed(0),
-            style: const TextStyle(
-              fontSize: 48,
-              fontWeight: FontWeight.bold,
-              color: Colors.tealAccent,
-            ),
+          Text(title, style: const TextStyle(color: Colors.grey, fontSize: 14)),
+          const Spacer(),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                '$completed',
+                style: TextStyle(
+                  fontSize: 32,
+                  fontWeight: FontWeight.bold,
+                  color: color,
+                ),
+              ),
+              Text(
+                ' / $total',
+                style: const TextStyle(fontSize: 16, color: Colors.grey),
+              ),
+            ],
           ),
           const SizedBox(height: 8),
           LinearProgressIndicator(
-            value: score / 100,
+            value: progress,
             backgroundColor: Colors.grey[800],
-            color: Colors.tealAccent,
-            minHeight: 8,
+            color: color,
+            borderRadius: BorderRadius.circular(4),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildStatRow(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8.0),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(label, style: const TextStyle(fontSize: 16)),
-          Text(
-            value,
-            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-          ),
-        ],
+  void _showPendingItems(BuildContext context, InsightsData stats) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      builder: (context) => DefaultTabController(
+        length: 4,
+        child: Column(
+          children: [
+            const TabBar(
+              isScrollable: true,
+              tabs: [
+                Tab(text: 'Tasks'),
+                Tab(text: 'Assignments'),
+                Tab(text: 'Courses'),
+                Tab(text: 'Events'),
+              ],
+            ),
+            Expanded(
+              child: TabBarView(
+                children: [
+                  _buildPendingList(
+                    stats.pendingTasks,
+                    (t) => ListTile(
+                      title: Text(t.title),
+                      subtitle: Text(
+                        t.dueDate != null
+                            ? 'Due: ${DateFormat.yMMMd().format(t.dueDate!)}'
+                            : 'No Due Date',
+                      ),
+                      trailing: const Icon(Icons.check_circle_outline),
+                    ),
+                  ),
+                  _buildPendingList(
+                    stats.pendingAssignments,
+                    (a) => ListTile(
+                      title: Text(a.title),
+                      subtitle: Text(
+                        '${a.type} - ${DateFormat.yMMMd().format(a.dueDate)}',
+                      ),
+                    ),
+                  ),
+                  _buildPendingList(
+                    stats.activeCourses,
+                    (c) => ListTile(
+                      title: Text(c.title),
+                      subtitle: Text('${c.sourceName} - ${c.status}'),
+                      trailing: Text('${c.progressPercent}%'),
+                    ),
+                  ),
+                  _buildPendingList(
+                    stats.upcomingEvents,
+                    (e) => ListTile(
+                      title: Text(e.name),
+                      subtitle: Text(
+                        'Starts: ${DateFormat.yMMMd().format(e.startDate)}',
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 
-  String _getMotivationalMessage(double score) {
-    if (score >= 80) return 'Outstanding focus today! 🚀';
-    if (score >= 50) return 'Good progress, keep it up! 👍';
-    return 'Let\'s get to work! 💪';
+  Widget _buildPendingList<T>(List<T> items, Widget Function(T) itemBuilder) {
+    if (items.isEmpty) {
+      return const Center(child: Text('No pending items. Great job!'));
+    }
+    return ListView.builder(
+      itemCount: items.length,
+      itemBuilder: (context, index) => itemBuilder(items[index]),
+    );
+  }
+
+  Widget _buildDailyStats(var dailyStats) {
+    return Card(
+      color: Colors.white10,
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceAround,
+          children: [
+            Column(
+              children: [
+                Text(
+                  '${dailyStats.studyMinutes}m',
+                  style: const TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const Text('Study Today'),
+              ],
+            ),
+            Column(
+              children: [
+                Text(
+                  '${dailyStats.tasksCompleted}',
+                  style: const TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const Text('Tasks Done'),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }

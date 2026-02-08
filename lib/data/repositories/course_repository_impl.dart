@@ -9,12 +9,67 @@ class CourseRepositoryImpl implements CourseRepository {
 
   @override
   Future<List<Course>> getCourses() async {
-    final result = await _dbHelper.getAllCourses();
-    List<Course> courses = [];
-    for (var map in result) {
-      courses.add(await _fromMapWithDetails(map));
+    final db = await _dbHelper.database;
+    final courseMaps = await _dbHelper.getAllCourses();
+
+    if (courseMaps.isEmpty) return [];
+
+    // Batch fetch all related data (More efficient than N+1 queries)
+    // Assuming reasonable dataset size for a personal app
+    final allLinks = await db.query('course_links');
+    final allDates = await db.query('course_dates');
+
+    // Group by course_id for O(1) access
+    final linksMap = <int, List<CourseLink>>{};
+    for (var l in allLinks) {
+      final cId = l['course_id'] as int;
+      if (!linksMap.containsKey(cId)) linksMap[cId] = [];
+      linksMap[cId]!.add(
+        CourseLink(
+          id: l['id'] as int,
+          url: l['url'] as String,
+          description: l['description'] as String,
+        ),
+      );
     }
-    return courses;
+
+    final datesMap = <int, List<CourseDate>>{};
+    for (var d in allDates) {
+      final cId = d['course_id'] as int;
+      if (!datesMap.containsKey(cId)) datesMap[cId] = [];
+      datesMap[cId]!.add(
+        CourseDate(
+          id: d['id'] as int,
+          date: DateTime.parse(d['date_val'] as String),
+          description: d['description'] as String,
+        ),
+      );
+    }
+
+    // Map to entities
+    return courseMaps.map((map) {
+      final id = map['id'] as int;
+      return Course(
+        id: id,
+        title: map['title'] as String,
+        description: map['description'] as String?,
+        type: _parseCourseType(map['type'] as String?),
+        sourceName:
+            map['source_name'] as String? ??
+            map['platform'] as String? ??
+            'Unknown',
+        channelName: map['channel_name'] as String?,
+        startDate: DateTime.parse(map['start_date'] as String),
+        completionDate: map['completion_date'] != null
+            ? DateTime.parse(map['completion_date'] as String)
+            : null,
+        progressPercent: (map['progress_percent'] as num).toDouble(),
+        status: map['status'] as String,
+        loginMail: map['login_mail'] as String?,
+        links: linksMap[id] ?? [],
+        timeline: datesMap[id] ?? [],
+      );
+    }).toList();
   }
 
   @override

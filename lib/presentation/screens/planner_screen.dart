@@ -140,9 +140,52 @@ class _PlannerScreenState extends State<PlannerScreen> {
                   provider.onDaySelected(selectedDay, focusedDay);
                 },
                 eventLoader: provider.getTasksForDay,
-                calendarStyle: const CalendarStyle(
+                calendarBuilders: CalendarBuilders(
+                  defaultBuilder: (context, day, focusedDay) {
+                    final tasks = provider.getTasksForDay(day);
+                    if (tasks.isNotEmpty) {
+                      return Container(
+                        margin: const EdgeInsets.all(4.0),
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: Colors.tealAccent.withValues(alpha: 0.2),
+                          border: Border.all(color: Colors.tealAccent),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Text(
+                          '${day.day}',
+                          style: const TextStyle(color: Colors.white),
+                        ),
+                      );
+                    }
+                    return null;
+                  },
+                  todayBuilder: (context, day, focusedDay) {
+                    final hasTasks = provider.getTasksForDay(day).isNotEmpty;
+                    return Container(
+                      margin: const EdgeInsets.all(6.0),
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: Colors.teal.withValues(alpha: 0.4),
+                        shape: BoxShape.circle,
+                        border: hasTasks
+                            ? Border.all(color: Colors.tealAccent, width: 2.0)
+                            : null,
+                      ),
+                      child: Text(
+                        '${day.day}',
+                        style: const TextStyle(color: Colors.white),
+                      ),
+                    );
+                  },
+                ),
+                calendarStyle: CalendarStyle(
                   markerDecoration: BoxDecoration(
                     color: Colors.tealAccent,
+                    shape: BoxShape.circle,
+                  ),
+                  todayDecoration: BoxDecoration(
+                    color: Colors.tealAccent.withValues(alpha: 0.3),
                     shape: BoxShape.circle,
                   ),
                 ),

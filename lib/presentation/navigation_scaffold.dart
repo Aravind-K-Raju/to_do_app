@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
+import 'screens/assignment_list_screen.dart';
 import 'screens/course_list_screen.dart';
-import 'screens/study_timer_screen.dart';
-import 'screens/planner_screen.dart';
 import 'screens/hackathon_list_screen.dart';
 import 'screens/insights_screen.dart';
+import 'screens/planner_screen.dart';
 
 class NavigationScaffold extends StatefulWidget {
   const NavigationScaffold({super.key});
@@ -18,7 +18,7 @@ class _NavigationScaffoldState extends State<NavigationScaffold> {
     const CourseListScreen(),
     const PlannerScreen(),
     const HackathonListScreen(),
-    const StudyTimerScreen(),
+    const AssignmentListScreen(),
     const InsightsScreen(),
   ];
 
@@ -39,7 +39,10 @@ class _NavigationScaffoldState extends State<NavigationScaffold> {
             label: 'Planner',
           ),
           BottomNavigationBarItem(icon: Icon(Icons.code), label: 'Events'),
-          BottomNavigationBarItem(icon: Icon(Icons.timer), label: 'Study'),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.assignment),
+            label: 'Assignments',
+          ),
           BottomNavigationBarItem(
             icon: Icon(Icons.insights),
             label: 'Insights',
