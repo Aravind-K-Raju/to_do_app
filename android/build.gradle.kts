@@ -9,36 +9,28 @@ val newBuildDir: Directory = rootProject.layout.buildDirectory.dir("../../build"
 rootProject.layout.buildDirectory.value(newBuildDir)
 
 subprojects {
-    val newSubprojectBuildDir: Directory = newBuildDir.dir(project.name)
-    project.layout.buildDirectory.value(newSubprojectBuildDir)
-}
-subprojects {
     project.evaluationDependsOn(":app")
-}
 
-subprojects {
+    // Only redirect the :app module's build directory.
+    // Plugin subprojects keep their default build dirs to avoid cross-drive path issues.
+    if (project.name == "app") {
+        project.layout.buildDirectory.value(newBuildDir.dir(project.name))
+    }
+
+    project.plugins.withId("com.android.library") {
+        val androidExtension = project.extensions.getByName("android")
+                as com.android.build.gradle.LibraryExtension
+        androidExtension.compileOptions {
+            sourceCompatibility = JavaVersion.VERSION_17
+            targetCompatibility = JavaVersion.VERSION_17
+        }
+    }
+
     project.tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile::class.java).configureEach {
         kotlinOptions {
             jvmTarget = "17"
         }
     }
-
-subprojects {
-    project.evaluationDependsOn(":app")
-
-    // Force all plugins to use Java 17
-    tasks.withType<JavaCompile>().configureEach {
-        sourceCompatibility = "17"
-        targetCompatibility = "17"
-    }
-
-    tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
-        kotlinOptions {
-            jvmTarget = "17"
-        }
-    }
-}
-    
 }
 
 tasks.register<Delete>("clean") {

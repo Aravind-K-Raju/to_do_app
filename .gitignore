@@ -58,3 +58,10 @@ app.*.map.json
 # Windows
 /windows/flutter/ephemeral/
 android/build/reports/problems/problems-report.html
+
+# Flutter/Dart
+/build/
+
+# Android
+**/android/app/build/
+**/android/.gradle/
