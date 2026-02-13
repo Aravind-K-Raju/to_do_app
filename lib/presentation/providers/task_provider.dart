@@ -20,6 +20,7 @@ class TaskProvider extends ChangeNotifier {
   });
 
   List<Task> _allTasks = [];
+  List<Task> get allTasks => _allTasks;
   List<Task> _selectedDayTasks = [];
   DateTime _selectedDay = DateTime.now();
 

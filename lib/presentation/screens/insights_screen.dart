@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../providers/intelligence_provider.dart';
 import '../../domain/entities/insights_data.dart';
 import 'package:intl/intl.dart';
+import '../widgets/notification_settings_dialog.dart';
 
 class InsightsScreen extends StatefulWidget {
   const InsightsScreen({super.key});
@@ -26,7 +27,20 @@ class _InsightsScreenState extends State<InsightsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Insights')),
+      appBar: AppBar(
+        title: const Text('Insights'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.notifications),
+            onPressed: () {
+              showDialog(
+                context: context,
+                builder: (context) => const NotificationSettingsDialog(),
+              );
+            },
+          ),
+        ],
+      ),
       body: Consumer<IntelligenceProvider>(
         builder: (context, provider, child) {
           if (provider.isLoading) {
