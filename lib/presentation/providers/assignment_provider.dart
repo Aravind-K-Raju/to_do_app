@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../domain/entities/assignment.dart';
 import '../../domain/usecases/assignment_usecases.dart';
+import '../../core/services/notification_scheduler.dart';
 
 class AssignmentProvider extends ChangeNotifier {
   final GetAssignments getAssignments;
@@ -37,14 +38,44 @@ class AssignmentProvider extends ChangeNotifier {
   Future<void> add(Assignment assignment) async {
     await addAssignment(assignment);
     await loadAssignments();
+    // Schedule notification
+    if (!assignment.isCompleted) {
+      final created = _assignments
+          .where((a) => a.title == assignment.title)
+          .lastOrNull;
+      if (created?.id != null) {
+        await NotificationScheduler.scheduleForItem(
+          baseId: created!.id!,
+          title: assignment.title,
+          body: '${assignment.subject ?? ''} - ${assignment.type}',
+          dueDate: assignment.dueDate,
+          type: 'Assignment',
+        );
+      }
+    }
   }
 
   Future<void> update(Assignment assignment) async {
     await updateAssignment(assignment);
     await loadAssignments();
+    // Reschedule notification
+    if (assignment.id != null) {
+      if (!assignment.isCompleted) {
+        await NotificationScheduler.scheduleForItem(
+          baseId: assignment.id!,
+          title: assignment.title,
+          body: '${assignment.subject ?? ''} - ${assignment.type}',
+          dueDate: assignment.dueDate,
+          type: 'Assignment',
+        );
+      } else {
+        await NotificationScheduler.cancelForItem(assignment.id!);
+      }
+    }
   }
 
   Future<void> delete(int id) async {
+    await NotificationScheduler.cancelForItem(id);
     await deleteAssignment(id);
     await loadAssignments();
   }

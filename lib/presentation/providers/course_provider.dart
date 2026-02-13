@@ -6,6 +6,7 @@ import '../../domain/usecases/update_course.dart';
 import '../../domain/usecases/delete_course.dart';
 import '../../domain/usecases/get_distinct_sites.dart';
 import '../../domain/usecases/get_distinct_login_mails.dart';
+import '../../core/services/notification_scheduler.dart';
 
 class CourseProvider extends ChangeNotifier {
   final GetCourses getCourses;
@@ -74,17 +75,59 @@ class CourseProvider extends ChangeNotifier {
     }
   }
 
+  Future<void> _scheduleCourseNotifications(Course course) async {
+    final id = course.id;
+    if (id == null) return;
+
+    // Schedule for start date
+    await NotificationScheduler.scheduleForItem(
+      baseId: id,
+      title: course.title,
+      body: 'Course starts!',
+      dueDate: course.startDate,
+      type: 'Course',
+    );
+
+    // Schedule for each timeline entry
+    for (int i = 0; i < course.timeline.length; i++) {
+      final entry = course.timeline[i];
+      await NotificationScheduler.scheduleForItem(
+        baseId: id * 1000 + i + 1, // Unique ID per timeline entry
+        title: course.title,
+        body: 'Timeline: ${entry.description}',
+        dueDate: entry.date,
+        type: 'Course',
+      );
+    }
+  }
+
+  Future<void> _cancelCourseNotifications(int id) async {
+    // Cancel start date notifications
+    await NotificationScheduler.cancelForItem(id);
+    // Cancel timeline notifications (up to 20 entries)
+    for (int i = 0; i < 20; i++) {
+      await NotificationScheduler.cancelForItem(id * 1000 + i + 1);
+    }
+  }
+
   Future<void> addCourse(Course course) async {
     await createCourse(course);
     await loadCourses();
+    final created = _courses.where((c) => c.title == course.title).lastOrNull;
+    if (created != null) {
+      await _scheduleCourseNotifications(created);
+    }
   }
 
   Future<void> editCourse(Course course) async {
     await updateCourse(course);
     await loadCourses();
+    await _cancelCourseNotifications(course.id!);
+    await _scheduleCourseNotifications(course);
   }
 
   Future<void> removeCourse(int id) async {
+    await _cancelCourseNotifications(id);
     await deleteCourse(id);
     await loadCourses();
   }

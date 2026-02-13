@@ -4,6 +4,7 @@ import '../../domain/usecases/create_task.dart';
 import '../../domain/usecases/update_task.dart';
 import '../../domain/usecases/delete_task.dart';
 import '../../data/repositories/task_repository_impl.dart';
+import '../../core/services/notification_scheduler.dart';
 
 class TaskProvider extends ChangeNotifier {
   final TaskRepositoryImpl
@@ -79,6 +80,20 @@ class TaskProvider extends ChangeNotifier {
   Future<void> addTask(Task task) async {
     await createTask(task);
     await loadAllTasks();
+    // Schedule notification if task has a due date
+    if (task.dueDate != null && !task.isCompleted) {
+      // Find the newly created task (last one with same title)
+      final created = _allTasks.where((t) => t.title == task.title).lastOrNull;
+      if (created?.id != null) {
+        await NotificationScheduler.scheduleForItem(
+          baseId: created!.id!,
+          title: task.title,
+          body: task.description ?? 'Task due',
+          dueDate: task.dueDate!,
+          type: 'Task',
+        );
+      }
+    }
   }
 
   Future<void> toggleTaskCompletion(Task task) async {
@@ -92,9 +107,24 @@ class TaskProvider extends ChangeNotifier {
     );
     await updateTask(updatedTask);
     await loadAllTasks();
+    // Cancel notification if completing, reschedule if un-completing
+    if (task.id != null) {
+      if (updatedTask.isCompleted) {
+        await NotificationScheduler.cancelForItem(task.id!);
+      } else if (task.dueDate != null) {
+        await NotificationScheduler.scheduleForItem(
+          baseId: task.id!,
+          title: task.title,
+          body: task.description ?? 'Task due',
+          dueDate: task.dueDate!,
+          type: 'Task',
+        );
+      }
+    }
   }
 
   Future<void> removeTask(int id) async {
+    await NotificationScheduler.cancelForItem(id);
     await deleteTask(id);
     await loadAllTasks();
   }

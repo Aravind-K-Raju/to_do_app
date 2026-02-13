@@ -8,6 +8,112 @@ import 'notification_service.dart';
 import 'notification_prefs_service.dart';
 
 class NotificationScheduler {
+  /// Schedule notifications for a single item (context-free).
+  /// Call this from providers when creating/updating items.
+  static Future<void> scheduleForItem({
+    required int baseId,
+    required String title,
+    required String body,
+    required DateTime dueDate,
+    required String type,
+  }) async {
+    final notificationService = NotificationService();
+    final prefsService = NotificationPrefsService();
+
+    final time = await prefsService.getNotificationTime();
+    final sameDay = await prefsService.getNotifySameDay();
+    final oneDay = await prefsService.getNotify1DayBefore();
+    final threeDays = await prefsService.getNotify3DaysBefore();
+
+    if (!sameDay && !oneDay && !threeDays) return;
+
+    // Cancel existing notifications for this item first
+    await cancelForItem(baseId);
+
+    final now = DateTime.now();
+
+    if (sameDay) {
+      final scheduledDate = DateTime(
+        dueDate.year,
+        dueDate.month,
+        dueDate.day,
+        time.hour,
+        time.minute,
+      );
+      if (scheduledDate.isAfter(now)) {
+        final id = "${baseId}_0".hashCode;
+        debugPrint(
+          '[NotifScheduler] Scheduling $type "$title" same-day at $scheduledDate (id=$id)',
+        );
+        await notificationService.scheduleNotification(
+          id: id,
+          title: '$type Reminder: $title',
+          body: 'Today: $body',
+          scheduledDate: scheduledDate,
+          payload: '$type|$baseId',
+          ongoing: true,
+        );
+      }
+    }
+
+    if (oneDay) {
+      final scheduledDate = DateTime(
+        dueDate.year,
+        dueDate.month,
+        dueDate.day,
+        time.hour,
+        time.minute,
+      ).subtract(const Duration(days: 1));
+      if (scheduledDate.isAfter(now)) {
+        final id = "${baseId}_1".hashCode;
+        debugPrint(
+          '[NotifScheduler] Scheduling $type "$title" 1-day-before at $scheduledDate (id=$id)',
+        );
+        await notificationService.scheduleNotification(
+          id: id,
+          title: '$type Reminder: $title',
+          body: 'Tomorrow: $body',
+          scheduledDate: scheduledDate,
+          payload: '$type|$baseId',
+          ongoing: true,
+        );
+      }
+    }
+
+    if (threeDays) {
+      final scheduledDate = DateTime(
+        dueDate.year,
+        dueDate.month,
+        dueDate.day,
+        time.hour,
+        time.minute,
+      ).subtract(const Duration(days: 3));
+      if (scheduledDate.isAfter(now)) {
+        final id = "${baseId}_3".hashCode;
+        debugPrint(
+          '[NotifScheduler] Scheduling $type "$title" 3-days-before at $scheduledDate (id=$id)',
+        );
+        await notificationService.scheduleNotification(
+          id: id,
+          title: '$type Reminder: $title',
+          body: 'In 3 Days: $body',
+          scheduledDate: scheduledDate,
+          payload: '$type|$baseId',
+          ongoing: true,
+        );
+      }
+    }
+  }
+
+  /// Cancel all notifications for a specific item.
+  static Future<void> cancelForItem(int baseId) async {
+    final notificationService = NotificationService();
+    await notificationService.cancelNotification("${baseId}_0".hashCode);
+    await notificationService.cancelNotification("${baseId}_1".hashCode);
+    await notificationService.cancelNotification("${baseId}_3".hashCode);
+    debugPrint('[NotifScheduler] Cancelled notifications for item $baseId');
+  }
+
   static Future<void> rescheduleAll(BuildContext context) async {
     final notificationService = NotificationService();
     final prefsService = NotificationPrefsService();

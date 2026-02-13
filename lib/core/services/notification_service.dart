@@ -28,12 +28,12 @@ class NotificationService {
     if (_isInitialized) return;
 
     tz.initializeTimeZones();
-    // Use dynamic/var to avoid weird type issues reported by analyzer
-    final dynamic timeZoneName = await FlutterTimezone.getLocalTimezone();
-    tz.setLocalLocation(tz.getLocation(timeZoneName as String));
+    // flutter_timezone 5.x returns TimezoneInfo; use .identifier for the name
+    final tzInfo = await FlutterTimezone.getLocalTimezone();
+    tz.setLocalLocation(tz.getLocation(tzInfo.identifier));
 
     const AndroidInitializationSettings initializationSettingsAndroid =
-        AndroidInitializationSettings('@mipmap/ic_launcher');
+        AndroidInitializationSettings('ic_notification');
 
     final DarwinInitializationSettings initializationSettingsDarwin =
         DarwinInitializationSettings(
@@ -58,15 +58,18 @@ class NotificationService {
     _isInitialized = true;
   }
 
-  // Static callback for background layout
+  // Static callback for background notification actions
   @pragma('vm:entry-point')
   static void notificationTapBackground(
     NotificationResponse notificationResponse,
   ) {
-    // Handling logic is better done via a top-level function in main or similar
-    // to avoid complex dependency injection issues in background isolate.
-    // For this implementation, we will rely on persistent callbacks or checks.
-    debugPrint('Notification action tapped: ${notificationResponse.actionId}');
+    debugPrint(
+      '[NotifService] Background action: ${notificationResponse.actionId}, '
+      'payload: ${notificationResponse.payload}',
+    );
+    // When the Mark Done button is tapped, the notification is auto-dismissed
+    // via cancelNotification: true on the action.
+    // The app will reconcile state on next launch.
   }
 
   Future<void> requestPermissions() async {
@@ -88,6 +91,26 @@ class NotificationService {
     }
   }
 
+  /// Show an instant test notification to verify the pipeline works.
+  Future<void> showTestNotification() async {
+    debugPrint('[NotifService] Firing instant test notification');
+    await flutterLocalNotificationsPlugin.show(
+      id: 99999,
+      title: 'Test Notification \u{1F514}',
+      body: 'If you see this, notifications are working!',
+      notificationDetails: const NotificationDetails(
+        android: AndroidNotificationDetails(
+          'todo_app_channel',
+          'To-Do Alerts',
+          channelDescription: 'Test notification',
+          importance: Importance.max,
+          priority: Priority.high,
+          icon: 'ic_notification',
+        ),
+      ),
+    );
+  }
+
   Future<void> scheduleNotification({
     required int id,
     required String title,
@@ -97,7 +120,15 @@ class NotificationService {
     bool ongoing = true,
   }) async {
     // Don't schedule in the past
-    if (scheduledDate.isBefore(DateTime.now())) return;
+    if (scheduledDate.isBefore(DateTime.now())) {
+      debugPrint(
+        '[NotifService] SKIPPED (in past): "$title" at $scheduledDate',
+      );
+      return;
+    }
+    debugPrint(
+      '[NotifService] Scheduling: "$title" at $scheduledDate (id=$id)',
+    );
 
     await flutterLocalNotificationsPlugin.zonedSchedule(
       id: id,
@@ -106,13 +137,14 @@ class NotificationService {
       scheduledDate: tz.TZDateTime.from(scheduledDate, tz.local),
       notificationDetails: NotificationDetails(
         android: AndroidNotificationDetails(
-          'todo_app_channel',
+          'todo_persistent_channel',
           'To-Do Alerts',
           channelDescription: 'Reminders for tasks, courses, and events',
           importance: Importance.max,
           priority: Priority.high,
+          icon: 'ic_notification',
           ongoing: ongoing, // Non-swipeable
-          autoCancel: false, // Don't auto-cancel on tap, action required
+          autoCancel: false, // Don't auto-cancel on tap
           actions: [
             AndroidNotificationAction(
               actionMarkDone,

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../domain/entities/hackathon.dart';
 import '../../domain/usecases/hackathon_usecases.dart';
+import '../../core/services/notification_scheduler.dart';
 
 class HackathonProvider extends ChangeNotifier {
   final GetHackathons getHackathons;
@@ -56,14 +57,38 @@ class HackathonProvider extends ChangeNotifier {
   Future<void> addHackathon(Hackathon hackathon) async {
     await createHackathon(hackathon);
     await loadHackathons();
+    // Schedule notification for start date
+    final created = _hackathons
+        .where((h) => h.name == hackathon.name)
+        .lastOrNull;
+    if (created?.id != null) {
+      await NotificationScheduler.scheduleForItem(
+        baseId: created!.id!,
+        title: hackathon.name,
+        body: 'Hackathon starts!',
+        dueDate: hackathon.startDate,
+        type: 'Event',
+      );
+    }
   }
 
   Future<void> editHackathon(Hackathon hackathon) async {
     await updateHackathon(hackathon);
     await loadHackathons();
+    // Reschedule notification
+    if (hackathon.id != null) {
+      await NotificationScheduler.scheduleForItem(
+        baseId: hackathon.id!,
+        title: hackathon.name,
+        body: 'Hackathon starts!',
+        dueDate: hackathon.startDate,
+        type: 'Event',
+      );
+    }
   }
 
   Future<void> removeHackathon(int id) async {
+    await NotificationScheduler.cancelForItem(id);
     await deleteHackathon(id);
     await loadHackathons();
   }
