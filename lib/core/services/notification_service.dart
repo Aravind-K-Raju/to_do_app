@@ -4,6 +4,7 @@ import 'package:timezone/data/latest_all.dart' as tz;
 import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:flutter/foundation.dart';
 import 'dart:io';
+import '../../data/database/database_helper.dart';
 
 class NotificationService {
   static final NotificationService _instance = NotificationService._internal();
@@ -60,16 +61,66 @@ class NotificationService {
 
   // Static callback for background notification actions
   @pragma('vm:entry-point')
-  static void notificationTapBackground(
+  static Future<void> notificationTapBackground(
     NotificationResponse notificationResponse,
-  ) {
+  ) async {
     debugPrint(
       '[NotifService] Background action: ${notificationResponse.actionId}, '
       'payload: ${notificationResponse.payload}',
     );
-    // When the Mark Done button is tapped, the notification is auto-dismissed
-    // via cancelNotification: true on the action.
-    // The app will reconcile state on next launch.
+
+    if (notificationResponse.actionId == actionMarkDone) {
+      final payload = notificationResponse.payload;
+      if (payload != null) {
+        final parts = payload.split('|');
+        if (parts.length >= 2) {
+          final type = parts[0];
+          final idStr = parts[1];
+          final id = int.tryParse(idStr);
+
+          if (id != null) {
+            // Initialize DB helper for this isolate
+            if (Platform.isWindows || Platform.isLinux) {
+              // FFI init might be needed here if on desktop, but usually
+              // main() handles it. In background isolate, might need check.
+              // Skipping FFI check for now as Android is primary target for this.
+            }
+
+            final dbHelper = DatabaseHelper.instance;
+            // We need to update existing task/assignment
+            if (type == 'Task') {
+              final task = await dbHelper.database.then(
+                (db) => db.query('tasks', where: 'id = ?', whereArgs: [id]),
+              );
+              if (task.isNotEmpty) {
+                final updatedTask = Map<String, dynamic>.from(task.first);
+                updatedTask['is_completed'] = 1;
+                await dbHelper.updateTask(updatedTask);
+              }
+            } else if (type == 'Assignment') {
+              final assignment = await dbHelper.database.then(
+                (db) =>
+                    db.query('assignments', where: 'id = ?', whereArgs: [id]),
+              );
+              if (assignment.isNotEmpty) {
+                final updatedAssignment = Map<String, dynamic>.from(
+                  assignment.first,
+                );
+                updatedAssignment['is_completed'] = 1;
+                await dbHelper.updateAssignment(updatedAssignment);
+              }
+            }
+          }
+        }
+      }
+
+      // Cancel the notification
+      if (notificationResponse.id != null) {
+        await FlutterLocalNotificationsPlugin().cancel(
+          id: notificationResponse.id!,
+        );
+      }
+    }
   }
 
   Future<void> requestPermissions() async {

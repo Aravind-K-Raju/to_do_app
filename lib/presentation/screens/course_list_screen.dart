@@ -70,6 +70,37 @@ class _CourseListScreenState extends State<CourseListScreen> {
                     ),
                   );
                 },
+                onDelete: () async {
+                  final confirm = await showDialog<bool>(
+                    context: context,
+                    builder: (ctx) => AlertDialog(
+                      title: const Text('Delete Course?'),
+                      content: const Text('This cannot be undone.'),
+                      actions: [
+                        TextButton(
+                          child: const Text('Cancel'),
+                          onPressed: () => Navigator.pop(ctx, false),
+                        ),
+                        TextButton(
+                          child: const Text('Delete'),
+                          onPressed: () => Navigator.pop(ctx, true),
+                        ),
+                      ],
+                    ),
+                  );
+
+                  if (confirm == true) {
+                    Provider.of<CourseProvider>(
+                      context,
+                      listen: false,
+                    ).removeCourse(course.id!);
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Course deleted')),
+                      );
+                    }
+                  }
+                },
               );
             },
           );

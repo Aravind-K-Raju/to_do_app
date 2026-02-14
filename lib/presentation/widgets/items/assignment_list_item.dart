@@ -6,12 +6,14 @@ class AssignmentListItem extends StatelessWidget {
   final Assignment assignment;
   final VoidCallback onTap;
   final VoidCallback onToggle;
+  final VoidCallback onDelete;
 
   const AssignmentListItem({
     super.key,
     required this.assignment,
     required this.onTap,
     required this.onToggle,
+    required this.onDelete,
   });
 
   @override
@@ -87,6 +89,12 @@ class AssignmentListItem extends StatelessWidget {
                     ),
                   ],
                 ),
+              ),
+
+              // Delete Icon
+              IconButton(
+                icon: const Icon(Icons.delete_outline, color: Colors.grey),
+                onPressed: onDelete,
               ),
             ],
           ),

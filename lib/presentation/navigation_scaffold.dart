@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../core/services/notification_service.dart';
+import '../core/services/notification_scheduler.dart';
 import 'screens/assignment_list_screen.dart';
 import 'screens/course_list_screen.dart';
 import 'screens/hackathon_list_screen.dart';
@@ -35,6 +36,10 @@ class _NavigationScaffoldState extends State<NavigationScaffold> {
         }
       }
     });
+    // Backfill scheduled_notifications table from existing data (V8 migration)
+    if (mounted) {
+      await NotificationScheduler.backfillFromExisting(context);
+    }
   }
 
   Future<void> _handleMarkDone(String payload) async {
@@ -79,14 +84,18 @@ class _NavigationScaffoldState extends State<NavigationScaffold> {
         } catch (_) {}
       }
     }
+
+    // Explicitly cancel the notification to remove it from the tray
+    // The notification ID is usually the same as the item ID.
+    await NotificationService().cancelNotification(id);
   }
 
   final List<Widget> _screens = [
+    const InsightsScreen(),
     const CourseListScreen(),
     const PlannerScreen(),
     const HackathonListScreen(),
     const AssignmentListScreen(),
-    const InsightsScreen(),
   ];
 
   @override
@@ -101,6 +110,10 @@ class _NavigationScaffoldState extends State<NavigationScaffold> {
         type: BottomNavigationBarType.fixed, // Needed for 4+ items
         onTap: (index) => setState(() => _currentIndex = index),
         items: const [
+          BottomNavigationBarItem(
+            icon: Icon(Icons.insights),
+            label: 'Insights',
+          ),
           BottomNavigationBarItem(icon: Icon(Icons.school), label: 'Courses'),
           BottomNavigationBarItem(
             icon: Icon(Icons.calendar_month),
@@ -110,10 +123,6 @@ class _NavigationScaffoldState extends State<NavigationScaffold> {
           BottomNavigationBarItem(
             icon: Icon(Icons.assignment),
             label: 'Assignments',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.insights),
-            label: 'Insights',
           ),
         ],
       ),

@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../domain/entities/hackathon.dart';
-import '../providers/hackathon_provider.dart';
+
 import 'hackathon_add_edit_screen.dart';
 
 class HackathonDetailScreen extends StatelessWidget {
@@ -37,38 +37,6 @@ class HackathonDetailScreen extends StatelessWidget {
                   builder: (_) => HackathonAddEditScreen(hackathon: hackathon),
                 ),
               );
-            },
-          ),
-          IconButton(
-            icon: const Icon(Icons.delete),
-            onPressed: () async {
-              final confirm = await showDialog<bool>(
-                context: context,
-                builder: (ctx) => AlertDialog(
-                  title: const Text('Delete Event?'),
-                  content: const Text('This cannot be undone.'),
-                  actions: [
-                    TextButton(
-                      child: const Text('Cancel'),
-                      onPressed: () => Navigator.pop(ctx, false),
-                    ),
-                    TextButton(
-                      child: const Text('Delete'),
-                      onPressed: () => Navigator.pop(ctx, true),
-                    ),
-                  ],
-                ),
-              );
-
-              if (confirm == true) {
-                if (context.mounted) {
-                  await Provider.of<HackathonProvider>(
-                    context,
-                    listen: false,
-                  ).removeHackathon(hackathon.id!);
-                  if (context.mounted) Navigator.pop(context);
-                }
-              }
             },
           ),
         ],

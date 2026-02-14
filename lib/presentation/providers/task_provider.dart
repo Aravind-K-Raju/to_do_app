@@ -82,15 +82,13 @@ class TaskProvider extends ChangeNotifier {
     await loadAllTasks();
     // Schedule notification if task has a due date
     if (task.dueDate != null && !task.isCompleted) {
-      // Find the newly created task (last one with same title)
       final created = _allTasks.where((t) => t.title == task.title).lastOrNull;
       if (created?.id != null) {
-        await NotificationScheduler.scheduleForItem(
-          baseId: created!.id!,
+        await NotificationScheduler.scheduleForTask(
+          taskId: created!.id!,
           title: task.title,
           body: task.description ?? 'Task due',
           dueDate: task.dueDate!,
-          type: 'Task',
         );
       }
     }
@@ -107,24 +105,26 @@ class TaskProvider extends ChangeNotifier {
     );
     await updateTask(updatedTask);
     await loadAllTasks();
-    // Cancel notification if completing, reschedule if un-completing
     if (task.id != null) {
       if (updatedTask.isCompleted) {
-        await NotificationScheduler.cancelForItem(task.id!);
+        // Cancel: query IDs → cancel OS → delete DB rows
+        await NotificationScheduler.cancelForItem('task_id', task.id!);
       } else if (task.dueDate != null) {
-        await NotificationScheduler.scheduleForItem(
-          baseId: task.id!,
+        // Re-schedule
+        await NotificationScheduler.scheduleForTask(
+          taskId: task.id!,
           title: task.title,
           body: task.description ?? 'Task due',
           dueDate: task.dueDate!,
-          type: 'Task',
         );
       }
     }
   }
 
   Future<void> removeTask(int id) async {
-    await NotificationScheduler.cancelForItem(id);
+    // 1. Query IDs → Cancel OS → Delete DB rows
+    await NotificationScheduler.cancelForItem('task_id', id);
+    // 2. Delete parent
     await deleteTask(id);
     await loadAllTasks();
   }

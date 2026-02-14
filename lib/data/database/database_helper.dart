@@ -20,10 +20,15 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 7,
+      version: 8,
       onCreate: _createDB,
       onUpgrade: _upgradeDB,
+      onConfigure: _onConfigure,
     );
+  }
+
+  Future<void> _onConfigure(Database db) async {
+    await db.execute('PRAGMA foreign_keys = ON');
   }
 
   Future<void> _upgradeDB(Database db, int oldVersion, int newVersion) async {
@@ -44,6 +49,9 @@ class DatabaseHelper {
     }
     if (oldVersion < 7) {
       await _upgradeToV7(db);
+    }
+    if (oldVersion < 8) {
+      await _upgradeToV8(db);
     }
   }
 
@@ -169,17 +177,6 @@ class DatabaseHelper {
       )
     ''');
 
-    // Course Certificates Table
-    await db.execute('''
-      CREATE TABLE course_certificates (
-        id $idType,
-        course_id $intType,
-        certificate_path $textType,
-        date_earned $textType,
-        FOREIGN KEY (course_id) REFERENCES courses (id) ON DELETE CASCADE
-      )
-    ''');
-
     // Tasks Table
     await db.execute('''
       CREATE TABLE tasks (
@@ -214,6 +211,9 @@ class DatabaseHelper {
     // Folders and Notes (V7)
     await _createFoldersTable(db);
     await _createNotesTable(db);
+
+    // Scheduled Notifications (V8)
+    await _createScheduledNotificationsTable(db);
   }
 
   // ---------------- CRUD Operations ----------------
@@ -258,32 +258,6 @@ class DatabaseHelper {
   Future<int> deleteCourse(int id) async {
     final db = await instance.database;
     return await db.delete('courses', where: 'id = ?', whereArgs: [id]);
-  }
-
-  // --- Certificates ---
-  Future<int> addCertificate(Map<String, dynamic> certificate) async {
-    final db = await instance.database;
-    return await db.insert('course_certificates', certificate);
-  }
-
-  Future<List<Map<String, dynamic>>> getCertificatesForCourse(
-    int courseId,
-  ) async {
-    final db = await instance.database;
-    return await db.query(
-      'course_certificates',
-      where: 'course_id = ?',
-      whereArgs: [courseId],
-    );
-  }
-
-  Future<int> deleteCertificate(int id) async {
-    final db = await instance.database;
-    return await db.delete(
-      'course_certificates',
-      where: 'id = ?',
-      whereArgs: [id],
-    );
   }
 
   // --- Tasks ---
@@ -368,6 +342,27 @@ class DatabaseHelper {
         FOREIGN KEY (folder_id) REFERENCES folders (id) ON DELETE CASCADE
       )
     ''');
+  }
+
+  Future<void> _createScheduledNotificationsTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE scheduled_notifications (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        scheduled_at TEXT NOT NULL,
+        title TEXT NOT NULL,
+        body TEXT NOT NULL,
+        type TEXT NOT NULL,
+        course_id INTEGER REFERENCES courses(id) ON DELETE CASCADE,
+        task_id INTEGER REFERENCES tasks(id) ON DELETE CASCADE,
+        assignment_id INTEGER REFERENCES assignments(id) ON DELETE CASCADE,
+        hackathon_id INTEGER REFERENCES hackathons(id) ON DELETE CASCADE
+      )
+    ''');
+  }
+
+  Future<void> _upgradeToV8(Database db) async {
+    await _createScheduledNotificationsTable(db);
+    // Data backfill happens at app startup via NotificationScheduler.backfillFromExisting()
   }
 
   Future<int> createAssignment(Map<String, dynamic> assignment) async {
@@ -671,5 +666,40 @@ class DatabaseHelper {
   Future<int> deleteNote(int id) async {
     final db = await instance.database;
     return await db.delete('notes', where: 'id = ?', whereArgs: [id]);
+  }
+
+  // --- Scheduled Notifications (V8) ---
+
+  Future<int> insertScheduledNotification(
+    Map<String, dynamic> notification,
+  ) async {
+    final db = await instance.database;
+    return await db.insert('scheduled_notifications', notification);
+  }
+
+  Future<List<Map<String, dynamic>>> getNotificationsFor(
+    String fkColumn,
+    int itemId,
+  ) async {
+    final db = await instance.database;
+    return await db.query(
+      'scheduled_notifications',
+      where: '$fkColumn = ?',
+      whereArgs: [itemId],
+    );
+  }
+
+  Future<void> deleteNotificationsFor(String fkColumn, int itemId) async {
+    final db = await instance.database;
+    await db.delete(
+      'scheduled_notifications',
+      where: '$fkColumn = ?',
+      whereArgs: [itemId],
+    );
+  }
+
+  Future<List<Map<String, dynamic>>> getAllScheduledNotifications() async {
+    final db = await instance.database;
+    return await db.query('scheduled_notifications');
   }
 }

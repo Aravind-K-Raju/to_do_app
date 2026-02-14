@@ -85,36 +85,47 @@ class _AssignmentListScreenState extends State<AssignmentListScreen>
       itemCount: assignments.length,
       itemBuilder: (context, index) {
         final assignment = assignments[index];
-        return Dismissible(
-          key: Key(assignment.id.toString()),
-          background: Container(
-            color: Colors.red,
-            alignment: Alignment.centerRight,
-            padding: const EdgeInsets.only(right: 20),
-            child: const Icon(Icons.delete, color: Colors.white),
-          ),
-          direction: DismissDirection.endToStart,
-          onDismissed: (direction) {
-            provider.delete(assignment.id!);
-            ScaffoldMessenger.of(
+        return AssignmentListItem(
+          assignment: assignment,
+          onTap: () {
+            Navigator.push(
               context,
-            ).showSnackBar(const SnackBar(content: Text('Assignment deleted')));
+              MaterialPageRoute(
+                builder: (_) => AssignmentAddEditScreen(assignment: assignment),
+              ),
+            );
           },
-          child: AssignmentListItem(
-            assignment: assignment,
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) =>
-                      AssignmentAddEditScreen(assignment: assignment),
-                ),
-              );
-            },
-            onToggle: () {
-              provider.toggleCompletion(assignment);
-            },
-          ),
+          onToggle: () {
+            provider.toggleCompletion(assignment);
+          },
+          onDelete: () async {
+            final confirm = await showDialog<bool>(
+              context: context,
+              builder: (ctx) => AlertDialog(
+                title: const Text('Delete Assignment?'),
+                content: const Text('This cannot be undone.'),
+                actions: [
+                  TextButton(
+                    child: const Text('Cancel'),
+                    onPressed: () => Navigator.pop(ctx, false),
+                  ),
+                  TextButton(
+                    child: const Text('Delete'),
+                    onPressed: () => Navigator.pop(ctx, true),
+                  ),
+                ],
+              ),
+            );
+
+            if (confirm == true) {
+              provider.delete(assignment.id!);
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Assignment deleted')),
+                );
+              }
+            }
+          },
         );
       },
     );

@@ -75,59 +75,47 @@ class CourseProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> _scheduleCourseNotifications(Course course) async {
-    final id = course.id;
-    if (id == null) return;
-
-    // Schedule for start date
-    await NotificationScheduler.scheduleForItem(
-      baseId: id,
-      title: course.title,
-      body: 'Course starts!',
-      dueDate: course.startDate,
-      type: 'Course',
-    );
-
-    // Schedule for each timeline entry
-    for (int i = 0; i < course.timeline.length; i++) {
-      final entry = course.timeline[i];
-      await NotificationScheduler.scheduleForItem(
-        baseId: id * 1000 + i + 1, // Unique ID per timeline entry
-        title: course.title,
-        body: 'Timeline: ${entry.description}',
-        dueDate: entry.date,
-        type: 'Course',
-      );
-    }
-  }
-
-  Future<void> _cancelCourseNotifications(int id) async {
-    // Cancel start date notifications
-    await NotificationScheduler.cancelForItem(id);
-    // Cancel timeline notifications (up to 20 entries)
-    for (int i = 0; i < 20; i++) {
-      await NotificationScheduler.cancelForItem(id * 1000 + i + 1);
-    }
-  }
-
   Future<void> addCourse(Course course) async {
     await createCourse(course);
     await loadCourses();
     final created = _courses.where((c) => c.title == course.title).lastOrNull;
-    if (created != null) {
-      await _scheduleCourseNotifications(created);
+    if (created?.id != null) {
+      await NotificationScheduler.scheduleForCourse(
+        courseId: created!.id!,
+        title: course.title,
+        startDate: course.startDate,
+        timeline: course.timeline
+            .map((e) => {'date': e.date, 'description': e.description})
+            .toList(),
+      );
     }
   }
 
   Future<void> editCourse(Course course) async {
+    if (course.id != null) {
+      // 1. Cancel OS alarms for old rows
+      // 2. Delete old DB rows
+      await NotificationScheduler.cancelForItem('course_id', course.id!);
+    }
     await updateCourse(course);
     await loadCourses();
-    await _cancelCourseNotifications(course.id!);
-    await _scheduleCourseNotifications(course);
+    if (course.id != null) {
+      // 3. Insert new rows + schedule OS
+      await NotificationScheduler.scheduleForCourse(
+        courseId: course.id!,
+        title: course.title,
+        startDate: course.startDate,
+        timeline: course.timeline
+            .map((e) => {'date': e.date, 'description': e.description})
+            .toList(),
+      );
+    }
   }
 
   Future<void> removeCourse(int id) async {
-    await _cancelCourseNotifications(id);
+    // 1. Query IDs → Cancel OS → Delete DB rows
+    await NotificationScheduler.cancelForItem('course_id', id);
+    // 2. Delete parent (CASCADE would also clean DB rows)
     await deleteCourse(id);
     await loadCourses();
   }

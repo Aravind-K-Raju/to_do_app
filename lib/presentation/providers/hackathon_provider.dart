@@ -57,38 +57,45 @@ class HackathonProvider extends ChangeNotifier {
   Future<void> addHackathon(Hackathon hackathon) async {
     await createHackathon(hackathon);
     await loadHackathons();
-    // Schedule notification for start date
     final created = _hackathons
         .where((h) => h.name == hackathon.name)
         .lastOrNull;
     if (created?.id != null) {
-      await NotificationScheduler.scheduleForItem(
-        baseId: created!.id!,
+      await NotificationScheduler.scheduleForHackathon(
+        hackathonId: created!.id!,
         title: hackathon.name,
-        body: 'Hackathon starts!',
-        dueDate: hackathon.startDate,
-        type: 'Event',
+        startDate: hackathon.startDate,
+        timeline: hackathon.timeline
+            .map((e) => {'date': e.date, 'description': e.description})
+            .toList(),
       );
     }
   }
 
   Future<void> editHackathon(Hackathon hackathon) async {
+    if (hackathon.id != null) {
+      // 1. Cancel OS alarms for old rows + delete DB rows
+      await NotificationScheduler.cancelForItem('hackathon_id', hackathon.id!);
+    }
     await updateHackathon(hackathon);
     await loadHackathons();
-    // Reschedule notification
     if (hackathon.id != null) {
-      await NotificationScheduler.scheduleForItem(
-        baseId: hackathon.id!,
+      // 2. Insert new rows + schedule OS
+      await NotificationScheduler.scheduleForHackathon(
+        hackathonId: hackathon.id!,
         title: hackathon.name,
-        body: 'Hackathon starts!',
-        dueDate: hackathon.startDate,
-        type: 'Event',
+        startDate: hackathon.startDate,
+        timeline: hackathon.timeline
+            .map((e) => {'date': e.date, 'description': e.description})
+            .toList(),
       );
     }
   }
 
   Future<void> removeHackathon(int id) async {
-    await NotificationScheduler.cancelForItem(id);
+    // 1. Query IDs → Cancel OS → Delete DB rows
+    await NotificationScheduler.cancelForItem('hackathon_id', id);
+    // 2. Delete parent (CASCADE also cleans DB rows)
     await deleteHackathon(id);
     await loadHackathons();
   }

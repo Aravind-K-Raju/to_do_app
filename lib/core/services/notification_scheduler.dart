@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../../data/database/database_helper.dart';
 import '../../presentation/providers/task_provider.dart';
 import '../../presentation/providers/course_provider.dart';
 import '../../presentation/providers/assignment_provider.dart';
@@ -8,131 +9,265 @@ import 'notification_service.dart';
 import 'notification_prefs_service.dart';
 
 class NotificationScheduler {
-  /// Schedule notifications for a single item (context-free).
-  /// Call this from providers when creating/updating items.
-  static Future<void> scheduleForItem({
-    required int baseId,
+  static final _db = DatabaseHelper.instance;
+  static final _notifService = NotificationService();
+  static final _prefsService = NotificationPrefsService();
+
+  // --------------- Core: Insert DB rows + schedule OS ---------------
+
+  /// Insert notification rows for an item's date, respecting user prefs
+  /// (same-day, 1-day-before, 3-days-before). Returns inserted row IDs.
+  static Future<List<int>> _insertRemindersForDate({
+    required String itemTitle,
+    required String bodyText,
+    required DateTime dueDate,
+    required String fkColumn,
+    required int itemId,
+    required String notifType,
+  }) async {
+    final time = await _prefsService.getNotificationTime();
+    final sameDay = await _prefsService.getNotifySameDay();
+    final oneDay = await _prefsService.getNotify1DayBefore();
+    final threeDays = await _prefsService.getNotify3DaysBefore();
+
+    final now = DateTime.now();
+    final insertedIds = <int>[];
+
+    final offsets = <int, String>{};
+    if (sameDay) offsets[0] = 'Today: $bodyText';
+    if (oneDay) offsets[1] = 'Tomorrow: $bodyText';
+    if (threeDays) offsets[3] = 'In 3 Days: $bodyText';
+
+    for (final entry in offsets.entries) {
+      final scheduledDate = DateTime(
+        dueDate.year,
+        dueDate.month,
+        dueDate.day,
+        time.hour,
+        time.minute,
+      ).subtract(Duration(days: entry.key));
+
+      if (scheduledDate.isAfter(now)) {
+        final rowId = await _db.insertScheduledNotification({
+          'scheduled_at': scheduledDate.toIso8601String(),
+          'title': '$notifType Reminder: $itemTitle',
+          'body': entry.value,
+          'type': notifType == 'Timeline' ? 'timeline' : 'reminder',
+          fkColumn: itemId,
+        });
+        insertedIds.add(rowId);
+        debugPrint(
+          '[NotifScheduler] Inserted DB row $rowId: "$itemTitle" at $scheduledDate',
+        );
+      }
+    }
+    return insertedIds;
+  }
+
+  /// Schedule OS alarms for a list of DB row IDs.
+  static Future<void> _scheduleOsForIds(List<int> ids) async {
+    for (final id in ids) {
+      await _scheduleOsForRow(id);
+    }
+  }
+
+  /// Schedule a single OS alarm from a DB row ID.
+  static Future<void> _scheduleOsForRow(int rowId) async {
+    final db = await _db.database;
+    final rows = await db.query(
+      'scheduled_notifications',
+      where: 'id = ?',
+      whereArgs: [rowId],
+    );
+    if (rows.isEmpty) return;
+    final row = rows.first;
+    final scheduledAt = DateTime.parse(row['scheduled_at'] as String);
+    if (scheduledAt.isBefore(DateTime.now())) return;
+
+    // Build payload from FK columns
+    String? payload;
+    if (row['course_id'] != null) {
+      payload = 'Course|${row['course_id']}';
+    }
+    if (row['task_id'] != null) {
+      payload = 'Task|${row['task_id']}';
+    }
+    if (row['assignment_id'] != null) {
+      payload = 'Assignment|${row['assignment_id']}';
+    }
+    if (row['hackathon_id'] != null) {
+      payload = 'Event|${row['hackathon_id']}';
+    }
+
+    await _notifService.scheduleNotification(
+      id: rowId, // DB row ID = OS notification ID
+      title: row['title'] as String,
+      body: row['body'] as String,
+      scheduledDate: scheduledAt,
+      payload: payload,
+      ongoing: true,
+    );
+  }
+
+  // --------------- Public API for Providers ---------------
+
+  /// Schedule notifications for a Course (start date + timeline).
+  static Future<void> scheduleForCourse({
+    required int courseId,
+    required String title,
+    required DateTime startDate,
+    required List<Map<String, dynamic>>
+    timeline, // [{date: DateTime, description: String}]
+  }) async {
+    final ids = <int>[];
+
+    // Start date reminders
+    ids.addAll(
+      await _insertRemindersForDate(
+        itemTitle: title,
+        bodyText: 'Course starts!',
+        dueDate: startDate,
+        fkColumn: 'course_id',
+        itemId: courseId,
+        notifType: 'Course',
+      ),
+    );
+
+    // Timeline entry reminders
+    for (final entry in timeline) {
+      ids.addAll(
+        await _insertRemindersForDate(
+          itemTitle: title,
+          bodyText: 'Timeline: ${entry['description']}',
+          dueDate: entry['date'] as DateTime,
+          fkColumn: 'course_id',
+          itemId: courseId,
+          notifType: 'Course',
+        ),
+      );
+    }
+
+    await _scheduleOsForIds(ids);
+  }
+
+  /// Schedule notifications for a Task.
+  static Future<void> scheduleForTask({
+    required int taskId,
     required String title,
     required String body,
     required DateTime dueDate,
-    required String type,
   }) async {
-    final notificationService = NotificationService();
-    final prefsService = NotificationPrefsService();
+    final ids = await _insertRemindersForDate(
+      itemTitle: title,
+      bodyText: body,
+      dueDate: dueDate,
+      fkColumn: 'task_id',
+      itemId: taskId,
+      notifType: 'Task',
+    );
+    await _scheduleOsForIds(ids);
+  }
 
-    final time = await prefsService.getNotificationTime();
-    final sameDay = await prefsService.getNotifySameDay();
-    final oneDay = await prefsService.getNotify1DayBefore();
-    final threeDays = await prefsService.getNotify3DaysBefore();
+  /// Schedule notifications for an Assignment.
+  static Future<void> scheduleForAssignment({
+    required int assignmentId,
+    required String title,
+    required String body,
+    required DateTime dueDate,
+  }) async {
+    final ids = await _insertRemindersForDate(
+      itemTitle: title,
+      bodyText: body,
+      dueDate: dueDate,
+      fkColumn: 'assignment_id',
+      itemId: assignmentId,
+      notifType: 'Assignment',
+    );
+    await _scheduleOsForIds(ids);
+  }
 
-    if (!sameDay && !oneDay && !threeDays) return;
+  /// Schedule notifications for a Hackathon (start date + timeline).
+  static Future<void> scheduleForHackathon({
+    required int hackathonId,
+    required String title,
+    required DateTime startDate,
+    required List<Map<String, dynamic>> timeline,
+  }) async {
+    final ids = <int>[];
 
-    // Cancel existing notifications for this item first
-    await cancelForItem(baseId);
+    ids.addAll(
+      await _insertRemindersForDate(
+        itemTitle: title,
+        bodyText: 'Event starts!',
+        dueDate: startDate,
+        fkColumn: 'hackathon_id',
+        itemId: hackathonId,
+        notifType: 'Event',
+      ),
+    );
 
-    final now = DateTime.now();
-
-    if (sameDay) {
-      final scheduledDate = DateTime(
-        dueDate.year,
-        dueDate.month,
-        dueDate.day,
-        time.hour,
-        time.minute,
+    for (final entry in timeline) {
+      ids.addAll(
+        await _insertRemindersForDate(
+          itemTitle: title,
+          bodyText: 'Timeline: ${entry['description']}',
+          dueDate: entry['date'] as DateTime,
+          fkColumn: 'hackathon_id',
+          itemId: hackathonId,
+          notifType: 'Event',
+        ),
       );
-      if (scheduledDate.isAfter(now)) {
-        final id = "${baseId}_0".hashCode;
-        debugPrint(
-          '[NotifScheduler] Scheduling $type "$title" same-day at $scheduledDate (id=$id)',
-        );
-        await notificationService.scheduleNotification(
-          id: id,
-          title: '$type Reminder: $title',
-          body: 'Today: $body',
-          scheduledDate: scheduledDate,
-          payload: '$type|$baseId',
-          ongoing: true,
-        );
-      }
     }
 
-    if (oneDay) {
-      final scheduledDate = DateTime(
-        dueDate.year,
-        dueDate.month,
-        dueDate.day,
-        time.hour,
-        time.minute,
-      ).subtract(const Duration(days: 1));
-      if (scheduledDate.isAfter(now)) {
-        final id = "${baseId}_1".hashCode;
-        debugPrint(
-          '[NotifScheduler] Scheduling $type "$title" 1-day-before at $scheduledDate (id=$id)',
-        );
-        await notificationService.scheduleNotification(
-          id: id,
-          title: '$type Reminder: $title',
-          body: 'Tomorrow: $body',
-          scheduledDate: scheduledDate,
-          payload: '$type|$baseId',
-          ongoing: true,
-        );
-      }
-    }
-
-    if (threeDays) {
-      final scheduledDate = DateTime(
-        dueDate.year,
-        dueDate.month,
-        dueDate.day,
-        time.hour,
-        time.minute,
-      ).subtract(const Duration(days: 3));
-      if (scheduledDate.isAfter(now)) {
-        final id = "${baseId}_3".hashCode;
-        debugPrint(
-          '[NotifScheduler] Scheduling $type "$title" 3-days-before at $scheduledDate (id=$id)',
-        );
-        await notificationService.scheduleNotification(
-          id: id,
-          title: '$type Reminder: $title',
-          body: 'In 3 Days: $body',
-          scheduledDate: scheduledDate,
-          payload: '$type|$baseId',
-          ongoing: true,
-        );
-      }
-    }
+    await _scheduleOsForIds(ids);
   }
 
-  /// Cancel all notifications for a specific item.
-  static Future<void> cancelForItem(int baseId) async {
-    final notificationService = NotificationService();
-    await notificationService.cancelNotification("${baseId}_0".hashCode);
-    await notificationService.cancelNotification("${baseId}_1".hashCode);
-    await notificationService.cancelNotification("${baseId}_3".hashCode);
-    debugPrint('[NotifScheduler] Cancelled notifications for item $baseId');
+  // --------------- Cancel: Query IDs → Cancel OS → Delete DB ---------------
+
+  /// Cancel all notifications for an item. Order: query IDs → cancel OS → delete DB rows.
+  static Future<void> cancelForItem(String fkColumn, int itemId) async {
+    // 1. Query IDs from DB
+    final rows = await _db.getNotificationsFor(fkColumn, itemId);
+    // 2. Cancel OS alarms
+    for (final row in rows) {
+      await _notifService.cancelNotification(row['id'] as int);
+    }
+    // 3. Delete DB rows (or let CASCADE handle it if parent is being deleted)
+    await _db.deleteNotificationsFor(fkColumn, itemId);
+    debugPrint(
+      '[NotifScheduler] Cancelled ${rows.length} notifications for $fkColumn=$itemId',
+    );
   }
 
-  static Future<void> rescheduleAll(BuildContext context) async {
-    final notificationService = NotificationService();
-    final prefsService = NotificationPrefsService();
+  // --------------- Reschedule All from DB ---------------
 
-    // cancel all first
-    await notificationService.cancelAll();
+  /// Re-schedule all future notifications from DB (e.g. after reboot or settings change).
+  static Future<void> rescheduleAllFromDb() async {
+    await _notifService.cancelAll();
+    final rows = await _db.getAllScheduledNotifications();
+    int scheduled = 0;
+    for (final row in rows) {
+      final scheduledAt = DateTime.parse(row['scheduled_at'] as String);
+      if (scheduledAt.isAfter(DateTime.now())) {
+        await _scheduleOsForRow(row['id'] as int);
+        scheduled++;
+      }
+    }
+    debugPrint('[NotifScheduler] Rescheduled $scheduled notifications from DB');
+  }
 
-    // Get settings
-    final time = await prefsService.getNotificationTime();
-    final sameDay = await prefsService.getNotifySameDay();
-    final oneDay = await prefsService.getNotify1DayBefore();
-    final threeDays = await prefsService.getNotify3DaysBefore();
+  // --------------- Backfill from Existing Data (V8 migration) ---------------
 
-    if (!sameDay && !oneDay && !threeDays) return;
+  /// Populate scheduled_notifications from existing items.
+  /// Called once at startup after V8 migration.
+  static Future<void> backfillFromExisting(BuildContext context) async {
+    // Check if backfill already done (table has rows)
+    final existing = await _db.getAllScheduledNotifications();
+    if (existing.isNotEmpty) return;
 
-    // Get Data
     if (!context.mounted) return;
-    final taskProvider = Provider.of<TaskProvider>(context, listen: false);
     final courseProvider = Provider.of<CourseProvider>(context, listen: false);
+    final taskProvider = Provider.of<TaskProvider>(context, listen: false);
     final assignmentProvider = Provider.of<AssignmentProvider>(
       context,
       listen: false,
@@ -144,158 +279,134 @@ class NotificationScheduler {
 
     // Ensure data is loaded
     await Future.wait([
-      taskProvider.loadAllTasks(),
       courseProvider.loadCourses(),
+      taskProvider.loadAllTasks(),
       assignmentProvider.loadAssignments(),
       hackathonProvider.loadHackathons(),
     ]);
 
-    // Helper to schedule
-    Future<void> schedule(
-      int baseId,
-      String title,
-      String body,
-      DateTime dueDate,
-      String type, {
-      String? payloadExtra,
-    }) async {
-      final now = DateTime.now();
-
-      // Same Day
-      if (sameDay) {
-        final scheduledDate = DateTime(
-          dueDate.year,
-          dueDate.month,
-          dueDate.day,
-          time.hour,
-          time.minute,
-        );
-        if (scheduledDate.isAfter(now)) {
-          // Create a unique ID by combining baseId and offset indicator
-          // Using simple math or string hash.
-          // Hash collision risk exists but low for this app scale.
-          final id = "${baseId}_0".hashCode;
-          await notificationService.scheduleNotification(
-            id: id,
-            title: '$type Reminder: $title',
-            body: 'Today: $body',
-            scheduledDate: scheduledDate,
-            payload:
-                '$type|$baseId${payloadExtra != null ? "|$payloadExtra" : ""}',
-            ongoing: true,
-          );
-        }
-      }
-
-      // 1 Day Before
-      if (oneDay) {
-        final scheduledDate = DateTime(
-          dueDate.year,
-          dueDate.month,
-          dueDate.day,
-          time.hour,
-          time.minute,
-        ).subtract(const Duration(days: 1));
-
-        if (scheduledDate.isAfter(now)) {
-          final id = "${baseId}_1".hashCode;
-          await notificationService.scheduleNotification(
-            id: id,
-            title: '$type Reminder: $title',
-            body: 'Tomorrow: $body',
-            scheduledDate: scheduledDate,
-            payload:
-                '$type|$baseId${payloadExtra != null ? "|$payloadExtra" : ""}',
-            ongoing: true,
-          );
-        }
-      }
-
-      // 3 Days Before
-      if (threeDays) {
-        final scheduledDate = DateTime(
-          dueDate.year,
-          dueDate.month,
-          dueDate.day,
-          time.hour,
-          time.minute,
-        ).subtract(const Duration(days: 3));
-
-        if (scheduledDate.isAfter(now)) {
-          final id = "${baseId}_3".hashCode;
-          await notificationService.scheduleNotification(
-            id: id,
-            title: '$type Reminder: $title',
-            body: 'In 3 Days: $body',
-            scheduledDate: scheduledDate,
-            payload:
-                '$type|$baseId${payloadExtra != null ? "|$payloadExtra" : ""}',
-            ongoing: true,
-          );
-        }
-      }
+    // Courses
+    for (final course in courseProvider.courses) {
+      if (course.id == null) continue;
+      await scheduleForCourse(
+        courseId: course.id!,
+        title: course.title,
+        startDate: course.startDate,
+        timeline: course.timeline
+            .map((e) => {'date': e.date, 'description': e.description})
+            .toList(),
+      );
     }
 
-    // Schedule Tasks
-    for (var task in taskProvider.allTasks) {
-      if (!task.isCompleted && task.dueDate != null) {
-        await schedule(
-          task.id!,
-          task.title,
-          task.description ?? 'No description',
-          task.dueDate!,
-          'Task',
-        );
-      }
+    // Tasks
+    for (final task in taskProvider.allTasks) {
+      if (task.id == null || task.isCompleted || task.dueDate == null) continue;
+      await scheduleForTask(
+        taskId: task.id!,
+        title: task.title,
+        body: task.description ?? 'Task due',
+        dueDate: task.dueDate!,
+      );
     }
 
-    // Schedule Assignments
-    for (var assignment in assignmentProvider.assignments) {
-      if (!assignment.isCompleted) {
-        await schedule(
-          assignment.id!,
-          assignment.title,
-          '${assignment.subject} - ${assignment.type}',
-          assignment.dueDate,
-          'Assignment',
-        );
-      }
+    // Assignments
+    for (final assignment in assignmentProvider.assignments) {
+      if (assignment.id == null || assignment.isCompleted) continue;
+      await scheduleForAssignment(
+        assignmentId: assignment.id!,
+        title: assignment.title,
+        body: '${assignment.subject ?? ''} - ${assignment.type}',
+        dueDate: assignment.dueDate,
+      );
     }
 
-    // Schedule Courses (Active only?)
-    // User said: "if there is a date data in any page(Course...) ... it should be notified"
-    // Courses have startDate. Maybe we notify about startDate?
-    for (var course in courseProvider.courses) {
-      // Assuming we notify for start date if it's in future?
-      // User said "if there is a date data".
-      // Let's schedule for Start Date.
-      if (course.startDate.isAfter(DateTime.now()) || sameDay) {
-        await schedule(
-          course.id!,
-          course.title,
-          'Course starts today!',
-          course.startDate,
-          'Course',
-        );
-      }
-
-      // Timeline events? Not easily accessible as flat list, nested in Course.
-      // If we want to be thorough we should iterate timeline.
-      // But user demand might be high. Let's start with high level items.
+    // Hackathons
+    for (final hackathon in hackathonProvider.hackathons) {
+      if (hackathon.id == null) continue;
+      await scheduleForHackathon(
+        hackathonId: hackathon.id!,
+        title: hackathon.name,
+        startDate: hackathon.startDate,
+        timeline: hackathon.timeline
+            .map((e) => {'date': e.date, 'description': e.description})
+            .toList(),
+      );
     }
 
-    // Schedule Hackathons
-    for (var hackathon in hackathonProvider.hackathons) {
-      // Start Date
-      if (hackathon.startDate.isAfter(DateTime.now()) || sameDay) {
-        await schedule(
-          hackathon.id!,
-          hackathon.name,
-          'Hackathon starts today!',
-          hackathon.startDate,
-          'Event',
-        );
-      }
+    debugPrint('[NotifScheduler] Backfill complete');
+  }
+
+  /// Reschedule all notifications (rebuild from providers).
+  /// Used when user changes notification preferences.
+  static Future<void> rescheduleAll(BuildContext context) async {
+    // Nuke everything
+    await _notifService.cancelAll();
+    final db = await _db.database;
+    await db.delete('scheduled_notifications');
+
+    if (!context.mounted) return;
+    final courseProvider = Provider.of<CourseProvider>(context, listen: false);
+    final taskProvider = Provider.of<TaskProvider>(context, listen: false);
+    final assignmentProvider = Provider.of<AssignmentProvider>(
+      context,
+      listen: false,
+    );
+    final hackathonProvider = Provider.of<HackathonProvider>(
+      context,
+      listen: false,
+    );
+
+    await Future.wait([
+      courseProvider.loadCourses(),
+      taskProvider.loadAllTasks(),
+      assignmentProvider.loadAssignments(),
+      hackathonProvider.loadHackathons(),
+    ]);
+
+    for (final course in courseProvider.courses) {
+      if (course.id == null) continue;
+      await scheduleForCourse(
+        courseId: course.id!,
+        title: course.title,
+        startDate: course.startDate,
+        timeline: course.timeline
+            .map((e) => {'date': e.date, 'description': e.description})
+            .toList(),
+      );
     }
+
+    for (final task in taskProvider.allTasks) {
+      if (task.id == null || task.isCompleted || task.dueDate == null) continue;
+      await scheduleForTask(
+        taskId: task.id!,
+        title: task.title,
+        body: task.description ?? 'Task due',
+        dueDate: task.dueDate!,
+      );
+    }
+
+    for (final assignment in assignmentProvider.assignments) {
+      if (assignment.id == null || assignment.isCompleted) continue;
+      await scheduleForAssignment(
+        assignmentId: assignment.id!,
+        title: assignment.title,
+        body: '${assignment.subject ?? ''} - ${assignment.type}',
+        dueDate: assignment.dueDate,
+      );
+    }
+
+    for (final hackathon in hackathonProvider.hackathons) {
+      if (hackathon.id == null) continue;
+      await scheduleForHackathon(
+        hackathonId: hackathon.id!,
+        title: hackathon.name,
+        startDate: hackathon.startDate,
+        timeline: hackathon.timeline
+            .map((e) => {'date': e.date, 'description': e.description})
+            .toList(),
+      );
+    }
+
+    debugPrint('[NotifScheduler] Full reschedule complete');
   }
 }

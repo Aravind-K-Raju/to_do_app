@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
+
 import 'package:intl/intl.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../domain/entities/course.dart';
-import '../providers/course_provider.dart';
+
 import 'course_add_edit_screen.dart';
 
 class CourseDetailScreen extends StatelessWidget {
@@ -37,38 +37,6 @@ class CourseDetailScreen extends StatelessWidget {
                   builder: (_) => CourseAddEditScreen(course: course),
                 ),
               );
-            },
-          ),
-          IconButton(
-            icon: const Icon(Icons.delete),
-            onPressed: () async {
-              final confirm = await showDialog<bool>(
-                context: context,
-                builder: (ctx) => AlertDialog(
-                  title: const Text('Delete Course?'),
-                  content: const Text('This cannot be undone.'),
-                  actions: [
-                    TextButton(
-                      child: const Text('Cancel'),
-                      onPressed: () => Navigator.pop(ctx, false),
-                    ),
-                    TextButton(
-                      child: const Text('Delete'),
-                      onPressed: () => Navigator.pop(ctx, true),
-                    ),
-                  ],
-                ),
-              );
-
-              if (confirm == true) {
-                if (context.mounted) {
-                  await Provider.of<CourseProvider>(
-                    context,
-                    listen: false,
-                  ).removeCourse(course.id!);
-                  if (context.mounted) Navigator.pop(context);
-                }
-              }
             },
           ),
         ],

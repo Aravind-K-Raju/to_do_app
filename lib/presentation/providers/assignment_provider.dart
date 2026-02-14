@@ -44,38 +44,41 @@ class AssignmentProvider extends ChangeNotifier {
           .where((a) => a.title == assignment.title)
           .lastOrNull;
       if (created?.id != null) {
-        await NotificationScheduler.scheduleForItem(
-          baseId: created!.id!,
+        await NotificationScheduler.scheduleForAssignment(
+          assignmentId: created!.id!,
           title: assignment.title,
           body: '${assignment.subject ?? ''} - ${assignment.type}',
           dueDate: assignment.dueDate,
-          type: 'Assignment',
         );
       }
     }
   }
 
   Future<void> update(Assignment assignment) async {
+    if (assignment.id != null) {
+      // 1. Cancel OS alarms for old rows + delete DB rows
+      await NotificationScheduler.cancelForItem(
+        'assignment_id',
+        assignment.id!,
+      );
+    }
     await updateAssignment(assignment);
     await loadAssignments();
-    // Reschedule notification
-    if (assignment.id != null) {
-      if (!assignment.isCompleted) {
-        await NotificationScheduler.scheduleForItem(
-          baseId: assignment.id!,
-          title: assignment.title,
-          body: '${assignment.subject ?? ''} - ${assignment.type}',
-          dueDate: assignment.dueDate,
-          type: 'Assignment',
-        );
-      } else {
-        await NotificationScheduler.cancelForItem(assignment.id!);
-      }
+    // 2. Re-schedule if not completed
+    if (assignment.id != null && !assignment.isCompleted) {
+      await NotificationScheduler.scheduleForAssignment(
+        assignmentId: assignment.id!,
+        title: assignment.title,
+        body: '${assignment.subject ?? ''} - ${assignment.type}',
+        dueDate: assignment.dueDate,
+      );
     }
   }
 
   Future<void> delete(int id) async {
-    await NotificationScheduler.cancelForItem(id);
+    // 1. Query IDs → Cancel OS → Delete DB rows
+    await NotificationScheduler.cancelForItem('assignment_id', id);
+    // 2. Delete parent
     await deleteAssignment(id);
     await loadAssignments();
   }
