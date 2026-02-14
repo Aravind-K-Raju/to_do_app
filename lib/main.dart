@@ -88,6 +88,7 @@ class OfflineApp extends StatelessWidget {
           create: (_) => IntelligenceProvider(
             getDailyStats: GetDailyStats(intelligenceRepository),
             getInsightsData: GetInsightsData(intelligenceRepository),
+            repository: intelligenceRepository,
           ),
         ),
         ChangeNotifierProvider(

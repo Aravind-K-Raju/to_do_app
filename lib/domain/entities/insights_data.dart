@@ -19,6 +19,8 @@ class InsightsData extends Equatable {
   final List<Task> pendingTasks;
   final List<Assignment> pendingAssignments;
   final List<Hackathon> upcomingEvents;
+  final List<AgendaItem> agendaToday;
+  final List<AgendaItem> agendaTomorrow;
 
   const InsightsData({
     required this.totalCourses,
@@ -34,6 +36,8 @@ class InsightsData extends Equatable {
     required this.pendingTasks,
     required this.pendingAssignments,
     required this.upcomingEvents,
+    required this.agendaToday,
+    required this.agendaTomorrow,
   });
 
   // Factory with defaults for empty state
@@ -52,6 +56,8 @@ class InsightsData extends Equatable {
       pendingTasks: [],
       pendingAssignments: [],
       upcomingEvents: [],
+      agendaToday: [],
+      agendaTomorrow: [],
     );
   }
 
@@ -70,5 +76,28 @@ class InsightsData extends Equatable {
     pendingTasks,
     pendingAssignments,
     upcomingEvents,
+    agendaToday,
+    agendaTomorrow,
   ];
+}
+
+class AgendaItem extends Equatable {
+  final int id;
+  final String title;
+  final String subtitle;
+  final DateTime? time;
+  final String type; // Task, Assignment, Event
+  final bool isCompleted;
+
+  const AgendaItem({
+    required this.id,
+    required this.title,
+    required this.subtitle,
+    this.time,
+    required this.type,
+    required this.isCompleted,
+  });
+
+  @override
+  List<Object?> get props => [id, title, subtitle, time, type, isCompleted];
 }

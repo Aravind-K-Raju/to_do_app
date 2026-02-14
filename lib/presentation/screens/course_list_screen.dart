@@ -89,7 +89,7 @@ class _CourseListScreenState extends State<CourseListScreen> {
                     ),
                   );
 
-                  if (confirm == true) {
+                  if (confirm == true && context.mounted) {
                     Provider.of<CourseProvider>(
                       context,
                       listen: false,

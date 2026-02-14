@@ -69,7 +69,7 @@ class _HackathonListScreenState extends State<HackathonListScreen> {
                     ),
                   );
 
-                  if (confirm == true) {
+                  if (confirm == true && context.mounted) {
                     Provider.of<HackathonProvider>(
                       context,
                       listen: false,
