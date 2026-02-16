@@ -17,13 +17,45 @@ class NavigationScaffold extends StatefulWidget {
   State<NavigationScaffold> createState() => _NavigationScaffoldState();
 }
 
-class _NavigationScaffoldState extends State<NavigationScaffold> {
+class _NavigationScaffoldState extends State<NavigationScaffold>
+    with WidgetsBindingObserver {
   int _currentIndex = 0;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _refreshProviders(); // Ensure data is loaded on launch
     _initNotifications();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      debugPrint('[NavScaffold] App resumed - refreshing data...');
+      _refreshProviders();
+    }
+  }
+
+  Future<void> _refreshProviders() async {
+    if (!mounted) return;
+    // Refresh Tasks
+    final taskProvider = Provider.of<TaskProvider>(context, listen: false);
+    await taskProvider.loadAllTasks();
+
+    if (!mounted) return;
+    // Refresh Assignments
+    final assignmentProvider = Provider.of<AssignmentProvider>(
+      context,
+      listen: false,
+    );
+    await assignmentProvider.loadAssignments();
   }
 
   Future<void> _initNotifications() async {
@@ -36,6 +68,9 @@ class _NavigationScaffoldState extends State<NavigationScaffold> {
         }
       }
     });
+    // Refresh all schedules to ensure they have the new payload format (RowId)
+    await NotificationScheduler.rescheduleAllFromDb();
+
     // Backfill scheduled_notifications table from existing data (V8 migration)
     if (mounted) {
       await NotificationScheduler.backfillFromExisting(context);
@@ -43,12 +78,21 @@ class _NavigationScaffoldState extends State<NavigationScaffold> {
   }
 
   Future<void> _handleMarkDone(String payload) async {
-    // format: type|id
+    debugPrint('[NavScaffold] Mark Done received with payload: $payload');
+    // format: type|itemId|rowId
     final parts = payload.split('|');
     if (parts.length < 2) return;
     final type = parts[0];
     final idStr = parts[1];
     final id = int.tryParse(idStr);
+
+    // Check for rowId (3rd part)
+    int? rowId;
+    if (parts.length >= 3) {
+      rowId = int.tryParse(parts[2]);
+    }
+    debugPrint('[NavScaffold] Parsed: ID=$id, RowID=$rowId');
+
     if (id == null) return;
 
     if (type == 'Task') {
@@ -68,8 +112,8 @@ class _NavigationScaffoldState extends State<NavigationScaffold> {
         try {
           final task = provider.allTasks.firstWhere((t) => t.id == id);
           await provider.toggleTaskCompletion(task);
-        } catch (_) {
-          // Task not found or other error
+        } catch (e) {
+          debugPrint('[NavScaffold] Error finding task to complete: $e');
         }
       }
     } else if (type == 'Assignment') {
@@ -85,9 +129,24 @@ class _NavigationScaffoldState extends State<NavigationScaffold> {
       }
     }
 
-    // Explicitly cancel the notification to remove it from the tray
-    // The notification ID is usually the same as the item ID.
-    await NotificationService().cancelNotification(id);
+    // Use NotificationScheduler's cancelForItem to handle DB lookup and multi-notification cleanup
+    // this handles the "rowId vs itemId" mismatch automatically by querying the DB
+    if (type == 'Task') {
+      await NotificationScheduler.cancelForItem('task_id', id);
+    } else if (type == 'Assignment') {
+      await NotificationScheduler.cancelForItem('assignment_id', id);
+    } else if (type == 'Course') {
+      await NotificationScheduler.cancelForItem('course_id', id);
+    } else if (type == 'Event') {
+      await NotificationScheduler.cancelForItem('hackathon_id', id);
+    } else {
+      // Fallback for unknown types or legacy
+      if (rowId != null) {
+        await NotificationService().cancelNotification(rowId);
+      } else {
+        await NotificationService().cancelNotification(id);
+      }
+    }
   }
 
   final List<Widget> _screens = [

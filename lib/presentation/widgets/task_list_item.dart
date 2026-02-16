@@ -40,10 +40,14 @@ class TaskListItem extends StatelessWidget {
         ),
         subtitle: task.dueDate != null
             ? Text(
-                DateFormat.yMMMd().format(task.dueDate!),
+                DateFormat.yMMMd().add_jm().format(task.dueDate!),
                 style: const TextStyle(fontSize: 12),
               )
             : null,
+        trailing: IconButton(
+          icon: const Icon(Icons.delete, color: Colors.grey),
+          onPressed: onDelete,
+        ),
       ),
     );
   }

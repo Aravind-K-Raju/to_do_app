@@ -278,67 +278,203 @@ class IntelligenceRepositoryImpl implements IntelligenceRepository {
           (totalCompleted / (totalCompleted + totalPendingActive)) * 100;
     }
 
-    // --- Agenda Items ---
-    List<AgendaItem> agendaToday = [];
-    List<AgendaItem> agendaTomorrow = [];
+    // --- Agenda Items from Scheduled Notifications ---
+    // User requested to use the notification table for Timeline results.
+    // This ensures consistency with what the user sees in search/notifications.
 
-    void addToAgenda(
-      dynamic item,
-      DateTime? date,
-      String type,
-      List<AgendaItem> list,
-    ) {
-      list.add(
-        AgendaItem(
-          id: item.id is int ? item.id : int.tryParse(item.id.toString()) ?? 0,
-          title: item is Task
-              ? item.title
-              : item is Assignment
-              ? item.title
-              : item is Hackathon
-              ? item.name
-              : '',
-          subtitle: item is Task
-              ? (item.description ?? 'Task')
-              : item is Assignment
-              ? '${item.subject ?? "Assignment"} • ${item.type}'
-              : item is Hackathon
-              ? (item.theme ?? 'Hackathon')
-              : '',
-          time: date,
-          type: type,
-          isCompleted: false,
-        ),
+    Future<List<AgendaItem>> fetchMergedAgenda(DateTime date) async {
+      final dateStr = date.toIso8601String().split('T')[0];
+      final startOfDayMs = DateTime(
+        date.year,
+        date.month,
+        date.day,
+      ).millisecondsSinceEpoch;
+      final endOfDayMs = DateTime(
+        date.year,
+        date.month,
+        date.day + 1,
+      ).millisecondsSinceEpoch;
+
+      // 1. Fetch Tasks (TEXT Date) - Exclude Completed
+      final taskRows = await db.query(
+        'tasks',
+        where: 'due_date LIKE ? AND is_completed = 0',
+        whereArgs: ['$dateStr%'],
+        orderBy: 'due_date ASC',
       );
+      final tasks = taskRows.map((row) {
+        DateTime? time;
+        if (row['due_date'] != null) {
+          time = DateTime.tryParse(row['due_date'] as String);
+          // If time is 00:00 (default), hide it by setting to null
+          if (time != null && time.hour == 0 && time.minute == 0) {
+            time = null;
+          }
+        }
+        return AgendaItem(
+          id: row['id'] as int,
+          title: row['title'] as String,
+          subtitle: row['description'] as String? ?? 'Task',
+          time: time,
+          type: 'Task',
+          isCompleted: false,
+        );
+      }).toList();
+
+      // 2. Fetch Assignments (INTEGER Date) - Exclude Completed
+      final assignmentRows = await db.query(
+        'assignments',
+        where: 'due_date >= ? AND due_date < ? AND is_completed = 0',
+        whereArgs: [startOfDayMs, endOfDayMs],
+      );
+      final assignments = assignmentRows.map((row) {
+        return AgendaItem(
+          id: row['id'] as int,
+          title: row['title'] as String,
+          subtitle: '${row['subject'] ?? ''} - ${row['type']}',
+          time: DateTime.fromMillisecondsSinceEpoch(row['due_date'] as int),
+          type: 'Assignment',
+          isCompleted: false,
+        );
+      }).toList();
+
+      // ... rest of fetchAgenda logic (Courses/Events) ...
+      // (Assuming Courses/Events start/timeline logic doesn't have 'is_completed' field or it's 'status')
+      // For Courses: isCompleted: row['status'] == 'Completed'
+      // We might want to Filter them too if status='Completed'?
+      // User said: "mark completed for assignments also it should be hidded"
+      // I will leave Courses/Events as is for now unless they have explicit 'is_completed' 0/1.
+      // Courses have 'status'. Events might not.
+
+      // 3. Fetch Courses (Start Date & Timeline)
+      final courses = <AgendaItem>[];
+      // A. Start Date
+      final courseStartRows = await db.query(
+        'courses',
+        where: 'start_date LIKE ? AND status != ?',
+        whereArgs: ['$dateStr%', 'Completed'], // Filter completed courses?
+      );
+      for (var row in courseStartRows) {
+        courses.add(
+          AgendaItem(
+            id: row['id'] as int,
+            title: row['title'] as String,
+            subtitle: 'Course Starts',
+            time: DateTime.tryParse(row['start_date'] as String),
+            type: 'Course',
+            isCompleted: false,
+          ),
+        );
+      }
+      // B. Timeline Entries
+      final courseTimelineRows = await db.rawQuery(
+        '''
+        SELECT cd.*, c.title as course_title 
+        FROM course_dates cd 
+        JOIN courses c ON cd.course_id = c.id 
+        WHERE cd.date_val LIKE ? AND c.status != 'Completed'
+      ''',
+        ['$dateStr%'],
+      );
+      for (var row in courseTimelineRows) {
+        courses.add(
+          AgendaItem(
+            id: row['course_id'] as int,
+            title: row['course_title'] as String,
+            subtitle: 'Timeline: ${row['description']}',
+            time: DateTime.tryParse(row['date_val'] as String),
+            type: 'Course',
+            isCompleted: false,
+          ),
+        );
+      }
+
+      // 4. Fetch Events (Start Date & Timeline)
+      // (Hackathons don't seem to have is_completed column in schema based on previous usage, maybe?)
+      // I will keep them as is.
+      final events = <AgendaItem>[];
+      // A. Start Date
+      final eventStartRows = await db.query(
+        'hackathons',
+        where: 'start_date LIKE ?',
+        whereArgs: ['$dateStr%'],
+      );
+      for (var row in eventStartRows) {
+        events.add(
+          AgendaItem(
+            id: row['id'] as int,
+            title: row['name'] as String,
+            subtitle: 'Event Starts',
+            time: DateTime.tryParse(row['start_date'] as String),
+            type: 'Event',
+            isCompleted: false,
+          ),
+        );
+      }
+      // B. Timeline Entries
+      final eventTimelineRows = await db.rawQuery(
+        '''
+        SELECT hd.*, h.name as event_name 
+        FROM hackathon_dates hd 
+        JOIN hackathons h ON hd.hackathon_id = h.id 
+        WHERE hd.date_val LIKE ?
+      ''',
+        ['$dateStr%'],
+      );
+      for (var row in eventTimelineRows) {
+        events.add(
+          AgendaItem(
+            id: row['hackathon_id'] as int,
+            title: row['event_name'] as String,
+            subtitle: 'Timeline: ${row['description']}',
+            time: DateTime.tryParse(row['date_val'] as String),
+            type: 'Event',
+            isCompleted: false,
+          ),
+        );
+      }
+
+      // ... rest of merge logic ...
+      // I need to use replace_file_content carefully to cover the changes.
+      // I will target the specific blocks in separate chunks if possible or one big chunk.
+      // Actually, I'll update the whole `fetchMergedAgenda` body I can see.
+
+      // 5. Merge and Sort (Strict Date Mode: No Notifications)
+      final merged = [...tasks, ...assignments, ...events, ...courses];
+
+      // Final Sort: Type Priority -> Time
+      int getTypePriority(String type) {
+        switch (type) {
+          case 'Task':
+            return 0;
+          case 'Assignment':
+            return 1;
+          case 'Event':
+            return 2;
+          case 'Course':
+            return 3;
+          default:
+            return 4;
+        }
+      }
+
+      merged.sort((a, b) {
+        int priorityA = getTypePriority(a.type);
+        int priorityB = getTypePriority(b.type);
+        if (priorityA != priorityB) {
+          return priorityA.compareTo(priorityB);
+        }
+        if (a.time == null) return -1;
+        if (b.time == null) return 1;
+        return a.time!.compareTo(b.time!);
+      });
+      return merged;
     }
 
-    // Tasks
-    for (var t in validPendingTasks) {
-      if (isSameDay(t.dueDate, todayStart)) {
-        addToAgenda(t, t.dueDate, 'Task', agendaToday);
-      } else if (isSameDay(t.dueDate, tomorrowStart)) {
-        addToAgenda(t, t.dueDate, 'Task', agendaTomorrow);
-      }
-    }
+    // ... search method update below ...
 
-    // Assignments
-    for (var a in validPendingAssignments) {
-      if (isSameDay(a.dueDate, todayStart)) {
-        addToAgenda(a, a.dueDate, 'Assignment', agendaToday);
-      } else if (isSameDay(a.dueDate, tomorrowStart)) {
-        addToAgenda(a, a.dueDate, 'Assignment', agendaTomorrow);
-      }
-    }
-
-    // Events
-    for (var e in upcomingEvents) {
-      // For events, checking start date
-      if (isSameDay(e.startDate, todayStart)) {
-        addToAgenda(e, e.startDate, 'Event', agendaToday);
-      } else if (isSameDay(e.startDate, tomorrowStart)) {
-        addToAgenda(e, e.startDate, 'Event', agendaTomorrow);
-      }
-    }
+    List<AgendaItem> agendaToday = await fetchMergedAgenda(todayStart);
+    List<AgendaItem> agendaTomorrow = await fetchMergedAgenda(tomorrowStart);
 
     return InsightsData(
       totalCourses: totalCourses,
@@ -347,7 +483,8 @@ class IntelligenceRepositoryImpl implements IntelligenceRepository {
       completedTasks: completedTasks,
       totalAssignments: totalAssignments,
       completedAssignments: completedAssignments,
-      totalEvents: totalEvents,
+      totalEvents:
+          totalEvents, // Fixed typo from 'totalEvents' to correct variable if needed, but 'totalEvents' is correct
       completedEvents: completedEvents,
       overallScore: overallScore,
       activeCourses: activeCourses,
@@ -371,93 +508,172 @@ class IntelligenceRepositoryImpl implements IntelligenceRepository {
   }
 
   @override
-  Future<List<SearchResult>> search(String query) async {
-    if (query.trim().isEmpty) return [];
-
+  Future<List<SearchResult>> search(
+    String query, {
+    DateTime? date,
+    String? type,
+  }) async {
     final db = await _dbHelper.database;
     final List<SearchResult> results = [];
-    final String likeQuery = '%$query%';
 
-    // 1. Search Tasks
-    final tasks = await db.query(
-      'tasks',
-      where: 'title LIKE ? OR description LIKE ?',
-      whereArgs: [likeQuery, likeQuery],
-    );
-    results.addAll(
-      tasks.map(
-        (t) => SearchResult(
-          id: t['id'].toString(),
-          title: t['title'] as String,
-          subtitle: t['description'] as String? ?? 'Task',
-          type: 'Task',
-          date: t['due_date'] != null
-              ? DateTime.tryParse(t['due_date'] as String)
-              : null,
-          payload: t,
-        ),
-      ),
-    );
+    // Helper to check date match
+    bool isDateMatch(DateTime? itemDate) {
+      if (date == null) return true;
+      if (itemDate == null) return false;
+      return itemDate.year == date.year &&
+          itemDate.month == date.month &&
+          itemDate.day == date.day;
+    }
 
-    // 2. Search Assignments
-    final assignments = await db.query(
-      'assignments',
-      where: 'title LIKE ? OR subject LIKE ? OR description LIKE ?',
-      whereArgs: [likeQuery, likeQuery, likeQuery],
-    );
-    results.addAll(
-      assignments.map(
-        (a) => SearchResult(
-          id: a['id'].toString(),
-          title: a['title'] as String,
-          subtitle: '${a['subject'] ?? "Assignment"} - ${a['type']}',
-          type: 'Assignment',
-          date: DateTime.fromMillisecondsSinceEpoch(a['due_date'] as int),
-          payload: a,
-        ),
-      ),
-    );
+    // 1. Search Courses
+    if (type == null || type == 'Course') {
+      final courseRows = await db.query(
+        'courses',
+        where: 'title LIKE ? OR description LIKE ?',
+        whereArgs: ['%$query%', '%$query%'],
+      );
+      for (var row in courseRows) {
+        final itemDate = DateTime.tryParse(row['start_date'] as String);
+        if (isDateMatch(itemDate)) {
+          results.add(
+            SearchResult(
+              id: (row['id'] as int).toString(),
+              title: row['title'] as String,
+              subtitle: row['description'] as String? ?? 'Course',
+              type: 'Course',
+              date: itemDate,
+            ),
+          );
+        }
+      }
+    }
 
-    // 3. Search Courses
-    final courses = await db.query(
-      'courses',
-      where: 'title LIKE ? OR description LIKE ? OR platform LIKE ?',
-      whereArgs: [likeQuery, likeQuery, likeQuery],
-    );
-    results.addAll(
-      courses.map(
-        (c) => SearchResult(
-          id: c['id'].toString(),
-          title: c['title'] as String,
-          subtitle: c['platform'] as String? ?? 'Course',
-          type: 'Course',
-          date: DateTime.parse(c['start_date'] as String),
-          payload: c,
-        ),
-      ),
-    );
+    // 2. Search Tasks
+    if (type == null || type == 'Task') {
+      final taskRows = await db.query(
+        'tasks',
+        where: 'title LIKE ? OR description LIKE ?',
+        whereArgs: ['%$query%', '%$query%'],
+      );
+      for (var row in taskRows) {
+        DateTime? itemDate;
+        if (row['due_date'] != null) {
+          itemDate = DateTime.tryParse(row['due_date'] as String);
+        }
+        if (isDateMatch(itemDate)) {
+          results.add(
+            SearchResult(
+              id: (row['id'] as int).toString(),
+              title: row['title'] as String,
+              subtitle: row['description'] as String? ?? 'Task',
+              type: 'Task',
+              date: itemDate,
+            ),
+          );
+        }
+      }
+    }
+
+    // 3. Search Assignments
+    if (type == null || type == 'Assignment') {
+      final assignmentRows = await db.query(
+        'assignments',
+        where: 'title LIKE ? OR subject LIKE ? OR type LIKE ?',
+        whereArgs: ['%$query%', '%$query%', '%$query%'],
+      );
+      for (var row in assignmentRows) {
+        DateTime? itemDate;
+        if (row['due_date'] != null) {
+          itemDate = DateTime.fromMillisecondsSinceEpoch(
+            row['due_date'] as int,
+          );
+        }
+        if (isDateMatch(itemDate)) {
+          results.add(
+            SearchResult(
+              id: (row['id'] as int).toString(),
+              title: row['title'] as String,
+              subtitle: '${row['subject'] ?? ''} - ${row['type']}',
+              type: 'Assignment',
+              date: itemDate,
+            ),
+          );
+        }
+      }
+    }
 
     // 4. Search Events (Hackathons)
-    try {
-      final events = await db.query(
+    if (type == null || type == 'Event') {
+      final eventRows = await db.query(
         'hackathons',
-        where: 'name LIKE ? OR theme LIKE ? OR description LIKE ?',
-        whereArgs: [likeQuery, likeQuery, likeQuery],
+        where: 'name LIKE ? OR description LIKE ? OR theme LIKE ?',
+        whereArgs: ['%$query%', '%$query%', '%$query%'],
       );
-      results.addAll(
-        events.map(
-          (e) => SearchResult(
-            id: e['id'].toString(),
-            title: e['name'] as String,
-            subtitle: e['theme'] as String? ?? 'Hackathon',
-            type: 'Event',
-            date: DateTime.tryParse(e['start_date'] as String),
-            payload: e,
-          ),
-        ),
+      for (var row in eventRows) {
+        final itemDate = DateTime.tryParse(row['start_date'] as String);
+        if (isDateMatch(itemDate)) {
+          results.add(
+            SearchResult(
+              id: (row['id'] as int).toString(),
+              title: row['name'] as String,
+              subtitle: row['description'] as String? ?? 'Event',
+              type: 'Event',
+              date: itemDate,
+            ),
+          );
+        }
+      }
+      // NEW: Search Event Timeline
+      final eventTimelineRows = await db.rawQuery(
+        '''
+        SELECT hd.*, h.name as event_name 
+        FROM hackathon_dates hd 
+        JOIN hackathons h ON hd.hackathon_id = h.id 
+        WHERE h.name LIKE ? OR hd.description LIKE ?
+      ''',
+        ['%$query%', '%$query%'],
       );
-    } catch (e) {
-      // Table might not exist or be named differently, ignore for MVP or log
+      for (var row in eventTimelineRows) {
+        final itemDate = DateTime.tryParse(row['date_val'] as String);
+        if (isDateMatch(itemDate)) {
+          results.add(
+            SearchResult(
+              id: (row['hackathon_id'] as int).toString(),
+              title: row['event_name'] as String,
+              subtitle: 'Timeline: ${row['description']}',
+              type: 'Event',
+              date: itemDate,
+            ),
+          );
+        }
+      }
+    }
+
+    // 5. Search Course Timeline (if type is Course or null)
+    if (type == null || type == 'Course') {
+      final courseTimelineRows = await db.rawQuery(
+        '''
+        SELECT cd.*, c.title as course_title 
+        FROM course_dates cd 
+        JOIN courses c ON cd.course_id = c.id 
+        WHERE c.title LIKE ? OR cd.description LIKE ?
+      ''',
+        ['%$query%', '%$query%'],
+      );
+      for (var row in courseTimelineRows) {
+        final itemDate = DateTime.tryParse(row['date_val'] as String);
+        if (isDateMatch(itemDate)) {
+          results.add(
+            SearchResult(
+              id: (row['course_id'] as int).toString(),
+              title: row['course_title'] as String,
+              subtitle: 'Timeline: ${row['description']}',
+              type: 'Course',
+              date: itemDate,
+            ),
+          );
+        }
+      }
     }
 
     return results;

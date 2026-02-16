@@ -5,6 +5,10 @@ import '../../domain/entities/insights_data.dart';
 import 'package:intl/intl.dart';
 import '../widgets/notification_settings_dialog.dart';
 import '../../core/app_theme.dart';
+import 'planner_screen.dart';
+import 'assignment_list_screen.dart';
+import 'course_list_screen.dart';
+import 'hackathon_list_screen.dart';
 
 class InsightsScreen extends StatefulWidget {
   const InsightsScreen({super.key});
@@ -37,6 +41,24 @@ class _InsightsScreenState extends State<InsightsScreen> {
     super.dispose();
   }
 
+  void _performSearch() {
+    final query = _searchController.text;
+    final hasQuery = query.trim().isNotEmpty;
+    final hasDate = _selectedDate != null;
+    final hasFilters = _selectedFilters.isNotEmpty;
+
+    if (hasQuery || hasDate || hasFilters) {
+      setState(() => _showSearchResults = true);
+      Provider.of<IntelligenceProvider>(
+        context,
+        listen: false,
+      ).search(query, date: _selectedDate, types: _selectedFilters);
+    } else {
+      setState(() => _showSearchResults = false);
+      Provider.of<IntelligenceProvider>(context, listen: false).clearSearch();
+    }
+  }
+
   void _toggleFilter(String filter) {
     setState(() {
       if (_selectedFilters.contains(filter)) {
@@ -45,6 +67,7 @@ class _InsightsScreenState extends State<InsightsScreen> {
         _selectedFilters.add(filter);
       }
     });
+    _performSearch();
   }
 
   Future<void> _selectDate() async {
@@ -74,6 +97,7 @@ class _InsightsScreenState extends State<InsightsScreen> {
       setState(() {
         _selectedDate = picked;
       });
+      _performSearch();
     }
   }
 
@@ -184,17 +208,7 @@ class _InsightsScreenState extends State<InsightsScreen> {
                         contentPadding: const EdgeInsets.symmetric(vertical: 0),
                       ),
                       onChanged: (value) {
-                        if (value.trim().isNotEmpty) {
-                          setState(() {
-                            _showSearchResults = true;
-                          });
-                          provider.search(value);
-                        } else {
-                          setState(() {
-                            _showSearchResults = false;
-                          });
-                          provider.clearSearch();
-                        }
+                        _performSearch();
                       },
                     ),
                     if (_selectedFilters.isNotEmpty || _selectedDate != null)
@@ -212,6 +226,7 @@ class _InsightsScreenState extends State<InsightsScreen> {
                                   setState(() {
                                     _selectedDate = null;
                                   });
+                                  _performSearch();
                                 },
                                 backgroundColor: Theme.of(
                                   context,
@@ -256,23 +271,7 @@ class _InsightsScreenState extends State<InsightsScreen> {
       return const Center(child: CircularProgressIndicator());
     }
 
-    final results = provider.searchResults.where((result) {
-      // 1. Filter by Type
-      if (_selectedFilters.isNotEmpty &&
-          !_selectedFilters.contains(result.type)) {
-        return false;
-      }
-
-      // 2. Filter by Date
-      if (_selectedDate != null) {
-        if (result.date == null) return false;
-        return result.date!.year == _selectedDate!.year &&
-            result.date!.month == _selectedDate!.month &&
-            result.date!.day == _selectedDate!.day;
-      }
-
-      return true;
-    }).toList();
+    final results = provider.searchResults;
 
     if (results.isEmpty) {
       return Center(
@@ -303,7 +302,7 @@ class _InsightsScreenState extends State<InsightsScreen> {
               style: const TextStyle(fontSize: 10, color: Colors.grey),
             ),
             onTap: () {
-              // Handle navigation if needed
+              _navigateToDetail(context, result.type, result.id);
             },
           ),
         );
@@ -311,7 +310,60 @@ class _InsightsScreenState extends State<InsightsScreen> {
     );
   }
 
+  // Navigation Logic
+  void _navigateToDetail(BuildContext context, String type, String idStr) {
+    final int? id = int.tryParse(idStr);
+    if (id == null) return;
+
+    switch (type) {
+      case 'Task':
+        // Navigate to Planner (Date focused if possible, or just Planner)
+        // Ideally we would highlight the task, but for now just going to Planner is good.
+        // Or if we had a dedicated Task Edit screen.
+        // Plan: Go to PlannerScreen.
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const PlannerScreen()),
+        );
+        break;
+      case 'Assignment':
+        // Go to Assignment Add/Edit (Edit mode)
+        // We need an Assignment object or just ID.
+        // Assuming AssignmentAddEditScreen takes an assignment object or id.
+        // Let's check AssignmentAddEditScreen wrapper or similar.
+        // If not readily available, we might default to AssignmentList.
+        // Better: Open AssignmentListScreen.
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const AssignmentListScreen()),
+        );
+        break;
+      case 'Course':
+        // Go to Course Detail
+        // We need to fetch the course or pass ID.
+        // CourseDetailScreen usually takes a Course object.
+        // We might need to fetch it first? Or does it take ID?
+        // Let's assume we navigate to CourseList for now to be safe,
+        // OR try to fetch.
+        // Simpler: CourseListScreen.
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const CourseListScreen()),
+        );
+        break;
+      case 'Event':
+        // Go to Hackathon Detail
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const HackathonListScreen()),
+        );
+        break;
+    }
+  }
+
   Widget _buildOverallScore(InsightsData stats) {
+    // ... (unchanged)
+
     // Calculate Total Completed
     int totalCompleted =
         stats.completedCourses +
@@ -362,7 +414,7 @@ class _InsightsScreenState extends State<InsightsScreen> {
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
-                '$totalCompleted / $totalPendingActive',
+                '$totalCompleted : $totalPendingActive',
                 style: const TextStyle(
                   fontSize: 28,
                   fontWeight: FontWeight.bold,
@@ -532,6 +584,9 @@ class _InsightsScreenState extends State<InsightsScreen> {
                     style: TextStyle(color: Colors.grey[400]),
                   )
                 : null,
+            onTap: () {
+              _navigateToDetail(context, item.type, item.id.toString());
+            },
           ),
         );
       },

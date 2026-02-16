@@ -87,16 +87,16 @@ class NotificationScheduler {
     // Build payload from FK columns
     String? payload;
     if (row['course_id'] != null) {
-      payload = 'Course|${row['course_id']}';
+      payload = 'Course|${row['course_id']}|$rowId';
     }
     if (row['task_id'] != null) {
-      payload = 'Task|${row['task_id']}';
+      payload = 'Task|${row['task_id']}|$rowId';
     }
     if (row['assignment_id'] != null) {
-      payload = 'Assignment|${row['assignment_id']}';
+      payload = 'Assignment|${row['assignment_id']}|$rowId';
     }
     if (row['hackathon_id'] != null) {
-      payload = 'Event|${row['hackathon_id']}';
+      payload = 'Event|${row['hackathon_id']}|$rowId';
     }
 
     await _notifService.scheduleNotification(
@@ -226,11 +226,16 @@ class NotificationScheduler {
 
   /// Cancel all notifications for an item. Order: query IDs → cancel OS → delete DB rows.
   static Future<void> cancelForItem(String fkColumn, int itemId) async {
+    debugPrint('[NotifScheduler] cancelForItem called for $fkColumn=$itemId');
     // 1. Query IDs from DB
     final rows = await _db.getNotificationsFor(fkColumn, itemId);
+    debugPrint('[NotifScheduler] Found ${rows.length} notifications to cancel');
+
     // 2. Cancel OS alarms
     for (final row in rows) {
-      await _notifService.cancelNotification(row['id'] as int);
+      final id = row['id'] as int;
+      debugPrint('[NotifScheduler] Cancelling OS notification ID: $id');
+      await _notifService.cancelNotification(id);
     }
     // 3. Delete DB rows (or let CASCADE handle it if parent is being deleted)
     await _db.deleteNotificationsFor(fkColumn, itemId);

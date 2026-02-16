@@ -48,21 +48,34 @@ class _NotificationSettingsDialogState
   Future<void> _saveSettings() async {
     setState(() => _isLoading = true);
 
-    // Request permissions if not granted
-    await _notificationService.requestPermissions();
+    try {
+      // Request permissions if not granted
+      await _notificationService.requestPermissions();
 
-    await _prefsService.setNotificationTime(_selectedTime);
-    await _prefsService.setNotifySameDay(_notifySameDay);
-    await _prefsService.setNotify1DayBefore(_notify1DayBefore);
-    await _prefsService.setNotify3DaysBefore(_notify3DaysBefore);
+      await _prefsService.setNotificationTime(_selectedTime);
+      await _prefsService.setNotifySameDay(_notifySameDay);
+      await _prefsService.setNotify1DayBefore(_notify1DayBefore);
+      await _prefsService.setNotify3DaysBefore(_notify3DaysBefore);
 
-    if (mounted) {
-      // Trigger reschedule
-      await NotificationScheduler.rescheduleAll(context);
       if (mounted) {
-        Navigator.pop(context);
+        // Trigger reschedule
+        await NotificationScheduler.rescheduleAll(context);
+        if (mounted) {
+          Navigator.pop(context);
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Notification settings saved.')),
+          );
+        }
+      }
+    } catch (e) {
+      debugPrint('Error saving settings: $e');
+      if (mounted) {
+        setState(() => _isLoading = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Notification settings saved.')),
+          SnackBar(
+            content: Text('Failed to save settings: $e'),
+            backgroundColor: Colors.red,
+          ),
         );
       }
     }

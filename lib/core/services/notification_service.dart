@@ -6,6 +6,7 @@ import 'package:flutter/foundation.dart';
 import 'dart:io';
 import '../../data/database/database_helper.dart';
 
+@pragma('vm:entry-point')
 class NotificationService {
   static final NotificationService _instance = NotificationService._internal();
 
@@ -66,7 +67,8 @@ class NotificationService {
   ) async {
     debugPrint(
       '[NotifService] Background action: ${notificationResponse.actionId}, '
-      'payload: ${notificationResponse.payload}',
+      'payload: ${notificationResponse.payload}, '
+      'input: ${notificationResponse.input}',
     );
 
     if (notificationResponse.actionId == actionMarkDone) {
@@ -77,6 +79,11 @@ class NotificationService {
           final type = parts[0];
           final idStr = parts[1];
           final id = int.tryParse(idStr);
+          // NEW: Parsing rowId if available (3rd part)
+          int? rowId;
+          if (parts.length >= 3) {
+            rowId = int.tryParse(parts[2]);
+          }
 
           if (id != null) {
             // Initialize DB helper for this isolate
@@ -86,9 +93,14 @@ class NotificationService {
               // Skipping FFI check for now as Android is primary target for this.
             }
 
+            // Manual "cancelForItem" logic for Background Isolate
+            // We avoid calling NotificationScheduler.cancelForItem to prevent static initialization issues.
+            // Using raw DB operations via DatabaseHelper.
+
             final dbHelper = DatabaseHelper.instance;
-            // We need to update existing task/assignment
+
             if (type == 'Task') {
+              // Mark Task Completed
               final task = await dbHelper.database.then(
                 (db) => db.query('tasks', where: 'id = ?', whereArgs: [id]),
               );
@@ -97,7 +109,20 @@ class NotificationService {
                 updatedTask['is_completed'] = 1;
                 await dbHelper.updateTask(updatedTask);
               }
+
+              // Cancel all notifications for this task
+              debugPrint(
+                '[NotifService] Cleaning up notifications for Task $id',
+              );
+              final rows = await dbHelper.getNotificationsFor('task_id', id);
+              for (final row in rows) {
+                await FlutterLocalNotificationsPlugin().cancel(
+                  id: row['id'] as int,
+                );
+              }
+              await dbHelper.deleteNotificationsFor('task_id', id);
             } else if (type == 'Assignment') {
+              // Mark Assignment Completed
               final assignment = await dbHelper.database.then(
                 (db) =>
                     db.query('assignments', where: 'id = ?', whereArgs: [id]),
@@ -109,16 +134,30 @@ class NotificationService {
                 updatedAssignment['is_completed'] = 1;
                 await dbHelper.updateAssignment(updatedAssignment);
               }
+
+              // Cancel all notifications for this assignment
+              debugPrint(
+                '[NotifService] Cleaning up notifications for Assignment $id',
+              );
+              final rows = await dbHelper.getNotificationsFor(
+                'assignment_id',
+                id,
+              );
+              for (final row in rows) {
+                await FlutterLocalNotificationsPlugin().cancel(
+                  id: row['id'] as int,
+                );
+              }
+              await dbHelper.deleteNotificationsFor('assignment_id', id);
+            } else {
+              // Fallback for other types or parsing errors: use explicit ID
+              final cancelId = rowId ?? notificationResponse.id;
+              if (cancelId != null) {
+                await FlutterLocalNotificationsPlugin().cancel(id: cancelId);
+              }
             }
           }
         }
-      }
-
-      // Cancel the notification
-      if (notificationResponse.id != null) {
-        await FlutterLocalNotificationsPlugin().cancel(
-          id: notificationResponse.id!,
-        );
       }
     }
   }

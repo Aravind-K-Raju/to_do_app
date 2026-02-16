@@ -20,7 +20,7 @@ class DatabaseHelper {
 
     return await openDatabase(
       path,
-      version: 8,
+      version: 10,
       onCreate: _createDB,
       onUpgrade: _upgradeDB,
       onConfigure: _onConfigure,
@@ -53,6 +53,70 @@ class DatabaseHelper {
     if (oldVersion < 8) {
       await _upgradeToV8(db);
     }
+    if (oldVersion < 9) {
+      await _upgradeToV9(db);
+    }
+    if (oldVersion < 10) {
+      await _upgradeToV10(db);
+    }
+  }
+
+  Future<void> _upgradeToV10(Database db) async {
+    // Recreate scheduled_notifications table to fix foreign key reference
+    // cause by tasks table rename in V9
+    await db.execute(
+      'ALTER TABLE scheduled_notifications RENAME TO scheduled_notifications_old',
+    );
+
+    await _createScheduledNotificationsTable(db);
+
+    // Copy data
+    // Columns: id, scheduled_at, title, body, type, course_id, task_id, assignment_id, hackathon_id
+    // We can just copy all
+    await db.execute('''
+      INSERT INTO scheduled_notifications (id, scheduled_at, title, body, type, course_id, task_id, assignment_id, hackathon_id)
+      SELECT id, scheduled_at, title, body, type, course_id, task_id, assignment_id, hackathon_id
+      FROM scheduled_notifications_old
+    ''');
+
+    await db.execute('DROP TABLE scheduled_notifications_old');
+  }
+
+  Future<void> _upgradeToV9(Database db) async {
+    // Make course_id nullable in tasks table
+    // SQLite doesn't support ALTER COLUMN, so we must recreate the table
+    // 1. Rename old table
+    await db.execute('ALTER TABLE tasks RENAME TO tasks_old');
+
+    // 2. Create new table with nullable course_id
+    const idType = 'INTEGER PRIMARY KEY AUTOINCREMENT';
+    const textType = 'TEXT NOT NULL';
+    const textNullable = 'TEXT';
+    const boolType = 'INTEGER NOT NULL';
+    const intNullable = 'INTEGER'; // Nullable integer
+
+    await db.execute('''
+      CREATE TABLE tasks (
+        id $idType,
+        title $textType,
+        description $textNullable,
+        is_completed $boolType,
+        course_id $intNullable,
+        due_date $textNullable,
+        FOREIGN KEY (course_id) REFERENCES courses (id) ON DELETE CASCADE
+      )
+    ''');
+
+    // 3. Copy data from old table to new table
+    // We can just copy columns as names match
+    await db.execute('''
+      INSERT INTO tasks (id, title, description, is_completed, course_id, due_date)
+      SELECT id, title, description, is_completed, course_id, due_date
+      FROM tasks_old
+    ''');
+
+    // 4. Drop old table
+    await db.execute('DROP TABLE tasks_old');
   }
 
   Future<void> _createHackathonsTable(Database db) async {
@@ -156,7 +220,9 @@ class DatabaseHelper {
     const textType = 'TEXT NOT NULL';
     const textNullable = 'TEXT';
     const boolType = 'INTEGER NOT NULL'; // 0 or 1
+    // ignore: unused_local_variable
     const intType = 'INTEGER NOT NULL';
+    const intNullable = 'INTEGER';
     const realType = 'REAL NOT NULL';
 
     // Courses Table
@@ -184,7 +250,7 @@ class DatabaseHelper {
         title $textType,
         description $textNullable,
         is_completed $boolType,
-        course_id $intType,
+        course_id $intNullable,
         due_date $textNullable,
         FOREIGN KEY (course_id) REFERENCES courses (id) ON DELETE CASCADE
       )
