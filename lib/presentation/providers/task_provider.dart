@@ -5,6 +5,7 @@ import '../../domain/usecases/update_task.dart';
 import '../../domain/usecases/delete_task.dart';
 import '../../data/repositories/task_repository_impl.dart';
 import '../../core/services/notification_scheduler.dart';
+import '../../core/services/widget_sync_service.dart';
 
 class TaskProvider extends ChangeNotifier {
   final TaskRepositoryImpl
@@ -56,6 +57,7 @@ class TaskProvider extends ChangeNotifier {
       _allTasks = await repository.getAllTasks();
       _groupTasksByDay();
       _updateSelectedDayTasks();
+      await WidgetSyncService.syncWidget();
       notifyListeners();
     } catch (e) {
       debugPrint("Error loading tasks: $e");
@@ -111,6 +113,24 @@ class TaskProvider extends ChangeNotifier {
         await NotificationScheduler.cancelForItem('task_id', task.id!);
       } else if (task.dueDate != null) {
         // Re-schedule
+        await NotificationScheduler.scheduleForTask(
+          taskId: task.id!,
+          title: task.title,
+          body: task.description ?? 'Task due',
+          dueDate: task.dueDate!,
+        );
+      }
+    }
+  }
+
+  Future<void> editTask(Task task) async {
+    await updateTask(task);
+    await loadAllTasks();
+    if (task.id != null) {
+      // Cancel previous scheduled alarms for this task first
+      await NotificationScheduler.cancelForItem('task_id', task.id!);
+      if (!task.isCompleted && task.dueDate != null) {
+        // Re-schedule if not completed and has a due date
         await NotificationScheduler.scheduleForTask(
           taskId: task.id!,
           title: task.title,

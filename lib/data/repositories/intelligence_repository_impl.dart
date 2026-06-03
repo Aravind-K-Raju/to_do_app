@@ -510,19 +510,21 @@ class IntelligenceRepositoryImpl implements IntelligenceRepository {
   @override
   Future<List<SearchResult>> search(
     String query, {
-    DateTime? date,
+    List<DateTime>? dates,
     String? type,
+    bool yetToCompleteOnly = false,
   }) async {
     final db = await _dbHelper.database;
     final List<SearchResult> results = [];
 
     // Helper to check date match
     bool isDateMatch(DateTime? itemDate) {
-      if (date == null) return true;
+      if (dates == null || dates.isEmpty) return true;
       if (itemDate == null) return false;
-      return itemDate.year == date.year &&
-          itemDate.month == date.month &&
-          itemDate.day == date.day;
+      return dates.any((d) =>
+          itemDate.year == d.year &&
+          itemDate.month == d.month &&
+          itemDate.day == d.day);
     }
 
     // 1. Search Courses
@@ -533,6 +535,10 @@ class IntelligenceRepositoryImpl implements IntelligenceRepository {
         whereArgs: ['%$query%', '%$query%'],
       );
       for (var row in courseRows) {
+        final status = row['status'] as String;
+        if (yetToCompleteOnly && status == 'Completed') {
+          continue;
+        }
         final itemDate = DateTime.tryParse(row['start_date'] as String);
         if (isDateMatch(itemDate)) {
           results.add(
@@ -556,6 +562,10 @@ class IntelligenceRepositoryImpl implements IntelligenceRepository {
         whereArgs: ['%$query%', '%$query%'],
       );
       for (var row in taskRows) {
+        final isCompleted = (row['is_completed'] as int) == 1;
+        if (yetToCompleteOnly && isCompleted) {
+          continue;
+        }
         DateTime? itemDate;
         if (row['due_date'] != null) {
           itemDate = DateTime.tryParse(row['due_date'] as String);
@@ -582,6 +592,10 @@ class IntelligenceRepositoryImpl implements IntelligenceRepository {
         whereArgs: ['%$query%', '%$query%', '%$query%'],
       );
       for (var row in assignmentRows) {
+        final isCompleted = (row['is_completed'] as int) == 1;
+        if (yetToCompleteOnly && isCompleted) {
+          continue;
+        }
         DateTime? itemDate;
         if (row['due_date'] != null) {
           itemDate = DateTime.fromMillisecondsSinceEpoch(
@@ -609,8 +623,17 @@ class IntelligenceRepositoryImpl implements IntelligenceRepository {
         where: 'name LIKE ? OR description LIKE ? OR theme LIKE ?',
         whereArgs: ['%$query%', '%$query%', '%$query%'],
       );
+      final now = DateTime.now();
       for (var row in eventRows) {
         final itemDate = DateTime.tryParse(row['start_date'] as String);
+        final endDateStr = row['end_date'] as String?;
+        final endDate = endDateStr != null && endDateStr.isNotEmpty
+            ? DateTime.tryParse(endDateStr)
+            : itemDate;
+        final isPast = endDate != null && endDate.isBefore(now);
+        if (yetToCompleteOnly && isPast) {
+          continue;
+        }
         if (isDateMatch(itemDate)) {
           results.add(
             SearchResult(
@@ -626,7 +649,7 @@ class IntelligenceRepositoryImpl implements IntelligenceRepository {
       // NEW: Search Event Timeline
       final eventTimelineRows = await db.rawQuery(
         '''
-        SELECT hd.*, h.name as event_name 
+        SELECT hd.*, h.name as event_name, h.end_date as event_end_date, h.start_date as event_start_date 
         FROM hackathon_dates hd 
         JOIN hackathons h ON hd.hackathon_id = h.id 
         WHERE h.name LIKE ? OR hd.description LIKE ?
@@ -635,6 +658,15 @@ class IntelligenceRepositoryImpl implements IntelligenceRepository {
       );
       for (var row in eventTimelineRows) {
         final itemDate = DateTime.tryParse(row['date_val'] as String);
+        final endStr = row['event_end_date'] as String?;
+        final startStr = row['event_start_date'] as String?;
+        final endDate = endStr != null && endStr.isNotEmpty
+            ? DateTime.tryParse(endStr)
+            : (startStr != null ? DateTime.tryParse(startStr) : null);
+        final isPast = endDate != null && endDate.isBefore(now);
+        if (yetToCompleteOnly && isPast) {
+          continue;
+        }
         if (isDateMatch(itemDate)) {
           results.add(
             SearchResult(
@@ -653,7 +685,7 @@ class IntelligenceRepositoryImpl implements IntelligenceRepository {
     if (type == null || type == 'Course') {
       final courseTimelineRows = await db.rawQuery(
         '''
-        SELECT cd.*, c.title as course_title 
+        SELECT cd.*, c.title as course_title, c.status as course_status 
         FROM course_dates cd 
         JOIN courses c ON cd.course_id = c.id 
         WHERE c.title LIKE ? OR cd.description LIKE ?
@@ -661,6 +693,10 @@ class IntelligenceRepositoryImpl implements IntelligenceRepository {
         ['%$query%', '%$query%'],
       );
       for (var row in courseTimelineRows) {
+        final status = row['course_status'] as String;
+        if (yetToCompleteOnly && status == 'Completed') {
+          continue;
+        }
         final itemDate = DateTime.tryParse(row['date_val'] as String);
         if (isDateMatch(itemDate)) {
           results.add(

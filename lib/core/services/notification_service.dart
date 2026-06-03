@@ -23,6 +23,8 @@ class NotificationService {
 
   // Key for actions
   static const String actionMarkDone = 'mark_done';
+  static const String actionMarkRead = 'mark_read';
+  static const String actionRemindLater = 'remind_later';
 
   Future<void> initialize(
     void Function(NotificationResponse)? onDidReceiveNotificationResponse,
@@ -71,7 +73,8 @@ class NotificationService {
       'input: ${notificationResponse.input}',
     );
 
-    if (notificationResponse.actionId == actionMarkDone) {
+    if (notificationResponse.actionId == actionMarkDone ||
+        notificationResponse.actionId == actionMarkRead) {
       final payload = notificationResponse.payload;
       if (payload != null) {
         final parts = payload.split('|');
@@ -83,6 +86,18 @@ class NotificationService {
           int? rowId;
           if (parts.length >= 3) {
             rowId = int.tryParse(parts[2]);
+          }
+
+          if (notificationResponse.actionId == actionMarkRead) {
+            final cancelId = rowId ?? notificationResponse.id;
+            if (cancelId != null) {
+              await FlutterLocalNotificationsPlugin().cancel(id: cancelId);
+              if (rowId != null) {
+                 final dbHelper = DatabaseHelper.instance;
+                 await dbHelper.database.then((db) => db.delete('scheduled_notifications', where: 'id = ?', whereArgs: [rowId]));
+              }
+            }
+            return;
           }
 
           if (id != null) {
@@ -236,6 +251,18 @@ class NotificationService {
           ongoing: ongoing, // Non-swipeable
           autoCancel: false, // Don't auto-cancel on tap
           actions: [
+            AndroidNotificationAction(
+              actionMarkRead,
+              'Mark as Read',
+              showsUserInterface: false,
+              cancelNotification: true,
+            ),
+            AndroidNotificationAction(
+              actionRemindLater,
+              'Remind Later',
+              showsUserInterface: true, // brings app to foreground
+              cancelNotification: true, // dismiss the current one
+            ),
             AndroidNotificationAction(
               actionMarkDone,
               'Mark Done',

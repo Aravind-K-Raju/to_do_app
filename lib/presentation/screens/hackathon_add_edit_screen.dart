@@ -2,15 +2,17 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
+import 'dart:convert';
 import 'package:receive_sharing_intent/receive_sharing_intent.dart';
 import '../../domain/entities/hackathon.dart';
 import '../../domain/entities/event_link.dart';
 import '../../domain/entities/event_date.dart';
 import '../providers/hackathon_provider.dart';
-// Import reusable widgets
+import '../providers/draft_provider.dart';
 import '../widgets/form/dynamic_link_section.dart';
 import '../widgets/form/dynamic_timeline_section.dart';
-import '../widgets/form/login_mail_autocomplete.dart';
+import '../widgets/form/styled_app_bar.dart';
+import '../widgets/form/styled_form_field.dart';
 
 class HackathonAddEditScreen extends StatefulWidget {
   final Hackathon? hackathon;
@@ -21,7 +23,7 @@ class HackathonAddEditScreen extends StatefulWidget {
   State<HackathonAddEditScreen> createState() => _HackathonAddEditScreenState();
 }
 
-class _HackathonAddEditScreenState extends State<HackathonAddEditScreen> {
+class _HackathonAddEditScreenState extends State<HackathonAddEditScreen> with WidgetsBindingObserver {
   final _formKey = GlobalKey<FormState>();
   late TextEditingController _nameController;
   late TextEditingController _themeController;
@@ -40,6 +42,9 @@ class _HackathonAddEditScreenState extends State<HackathonAddEditScreen> {
   List<EventDate> _timeline = [];
 
   StreamSubscription? _intentDataStreamSubscription;
+  
+  bool _isSaved = false;
+  bool _canPop = false;
 
   @override
   void initState() {
@@ -77,8 +82,61 @@ class _HackathonAddEditScreenState extends State<HackathonAddEditScreen> {
       _links = List.from(widget.hackathon!.links);
       _timeline = List.from(widget.hackathon!.timeline);
     } else {
+      _loadDraft();
       // Only listen for sharing intent if creating new event
       _initSharingListener();
+    }
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  Future<void> _loadDraft() async {
+    final draftProvider = Provider.of<DraftProvider>(context, listen: false);
+    final draftJson = await draftProvider.getDraft('draft_hackathon');
+    if (draftJson != null && mounted) {
+      try {
+        final data = jsonDecode(draftJson);
+        setState(() {
+          _nameController.text = data['name'] ?? '';
+          _themeController.text = data['theme'] ?? '';
+          _descriptionController.text = data['description'] ?? '';
+          _techStackController.text = data['techStack'] ?? '';
+          _outcomeController.text = data['outcome'] ?? '';
+          _linkController.text = data['projectLink'] ?? '';
+          _loginMailController.text = data['loginMail'] ?? '';
+        });
+      } catch (e) {
+        debugPrint('Error loading draft: $e');
+      }
+    }
+  }
+
+  bool _hasData() {
+    return _nameController.text.isNotEmpty || _themeController.text.isNotEmpty || _descriptionController.text.isNotEmpty;
+  }
+
+  Future<void> _saveDraft() async {
+    if (_hasData()) {
+      final draftData = {
+        'name': _nameController.text,
+        'theme': _themeController.text,
+        'description': _descriptionController.text,
+        'techStack': _techStackController.text,
+        'outcome': _outcomeController.text,
+        'projectLink': _linkController.text,
+        'loginMail': _loginMailController.text,
+      };
+      await Provider.of<DraftProvider>(context, listen: false).saveDraft('draft_hackathon', jsonEncode(draftData));
+    } else {
+      await Provider.of<DraftProvider>(context, listen: false).clearDraft('draft_hackathon');
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive) {
+      if (!_isSaved && widget.hackathon == null) {
+        _saveDraft();
+      }
     }
   }
 
@@ -122,6 +180,7 @@ class _HackathonAddEditScreenState extends State<HackathonAddEditScreen> {
     _linkController.dispose();
     _loginMailController.dispose();
     _intentDataStreamSubscription?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
 
@@ -168,126 +227,180 @@ class _HackathonAddEditScreenState extends State<HackathonAddEditScreen> {
       } else {
         provider.editHackathon(newHackathon);
       }
+      
+      _isSaved = true;
+      if (widget.hackathon == null) {
+        Provider.of<DraftProvider>(context, listen: false).clearDraft('draft_hackathon');
+      }
+      setState(() { _canPop = true; });
       Navigator.pop(context);
     }
   }
 
+  Future<void> _handleBack() async {
+    if (!_isSaved && widget.hackathon == null) {
+      if (_hasData()) {
+        await _saveDraft();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Draft saved')));
+        }
+      } else {
+        await Provider.of<DraftProvider>(context, listen: false).clearDraft('draft_hackathon');
+      }
+    }
+    setState(() { _canPop = true; });
+    if (mounted) Navigator.pop(context);
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(widget.hackathon == null ? 'Add Event' : 'Edit Event'),
-        actions: [IconButton(icon: const Icon(Icons.check), onPressed: _save)],
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Form(
-          key: _formKey,
-          child: ListView(
-            children: [
-              TextFormField(
-                controller: _nameController,
-                decoration: const InputDecoration(
-                  labelText: 'Event Name',
-                  border: OutlineInputBorder(),
+    return PopScope(
+      canPop: _canPop,
+      onPopInvokedWithResult: (didPop, result) async {
+        if (didPop) return;
+        await _handleBack();
+      },
+      child: Scaffold(
+        appBar: StyledAppBar(
+          title: widget.hackathon == null ? 'Add Event' : 'Edit Event',
+          subtitle: 'Track hackathons and technical events',
+          onBack: _handleBack,
+          onSave: _save,
+          isEditMode: widget.hackathon != null,
+        ),
+        body: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16.0),
+          child: Form(
+            key: _formKey,
+            child: ListView(
+              children: [
+                const SizedBox(height: 16),
+                StyledFormField(
+                  label: 'Event Name',
+                  icon: Icons.emoji_events,
+                  iconColor: const Color(0xFFF59E0B),
+                  child: TextFormField(
+                    controller: _nameController,
+                    decoration: const InputDecoration(hintText: 'Enter event name'),
+                    validator: (val) => val!.isEmpty ? 'Enter name' : null,
+                  ),
                 ),
-                validator: (val) => val!.isEmpty ? 'Enter name' : null,
-              ),
-              const SizedBox(height: 16),
-
-              TextFormField(
-                controller: _themeController,
-                decoration: const InputDecoration(
-                  labelText: 'Theme / Topic',
-                  border: OutlineInputBorder(),
+                
+                StyledFormField(
+                  label: 'Theme / Topic',
+                  icon: Icons.lightbulb,
+                  iconColor: const Color(0xFF8B5CF6),
+                  child: TextFormField(
+                    controller: _themeController,
+                    decoration: const InputDecoration(hintText: 'Enter theme or topic'),
+                  ),
                 ),
-              ),
-              const SizedBox(height: 16),
 
-              Consumer<HackathonProvider>(
-                builder: (context, provider, child) {
-                  return LoginMailAutocomplete(
-                    controller: _loginMailController,
-                    distinctLoginMails: provider.distinctLoginMails,
-                  );
-                },
-              ),
-              const SizedBox(height: 16),
-
-              TextFormField(
-                controller: _descriptionController,
-                decoration: const InputDecoration(
-                  labelText: 'Description',
-                  border: OutlineInputBorder(),
+                Consumer<HackathonProvider>(
+                  builder: (context, provider, child) {
+                    return Autocomplete<String>(
+                      optionsBuilder: (TextEditingValue textEditingValue) {
+                        if (textEditingValue.text == '') return const Iterable<String>.empty();
+                        return provider.distinctLoginMails.where((String option) => option.toLowerCase().contains(textEditingValue.text.toLowerCase()));
+                      },
+                      onSelected: (String selection) => _loginMailController.text = selection,
+                      fieldViewBuilder: (context, textEditingController, focusNode, onFieldSubmitted) {
+                        if (textEditingController.value != _loginMailController.value && _loginMailController.text.isNotEmpty && textEditingController.text.isEmpty) {
+                          textEditingController.value = _loginMailController.value;
+                        }
+                        textEditingController.addListener(() {
+                          if (_loginMailController.value != textEditingController.value) {
+                            _loginMailController.value = textEditingController.value;
+                          }
+                        });
+                        
+                        return StyledFormField(
+                          label: 'Login Mail (Optional)',
+                          icon: Icons.email,
+                          iconColor: const Color(0xFF0EA5E9),
+                          helperText: 'Account used for login',
+                          child: TextFormField(
+                            controller: textEditingController,
+                            focusNode: focusNode,
+                            onFieldSubmitted: (String value) => onFieldSubmitted(),
+                            decoration: const InputDecoration(hintText: 'Enter login email'),
+                          ),
+                        );
+                      },
+                    );
+                  },
                 ),
-                maxLines: 4,
-              ),
-              const SizedBox(height: 16),
 
-              // Dates
-              Row(
-                children: [
-                  Expanded(
-                    child: InkWell(
-                      onTap: () => _selectDate(true),
-                      child: InputDecorator(
-                        decoration: const InputDecoration(
-                          labelText: 'Start Date',
-                          border: OutlineInputBorder(),
-                        ),
+                StyledFormField(
+                  label: 'Description',
+                  icon: Icons.description,
+                  iconColor: const Color(0xFF3B82F6),
+                  child: TextFormField(
+                    controller: _descriptionController,
+                    decoration: const InputDecoration(hintText: 'Add a short description...'),
+                    maxLines: 4,
+                  ),
+                ),
+
+                // Dates
+                Row(
+                  children: [
+                    Expanded(
+                      child: StyledFormField(
+                        label: 'Start Date',
+                        icon: Icons.calendar_today,
+                        iconColor: const Color(0xFF10B981),
+                        trailing: const Icon(Icons.calendar_month, color: Colors.grey),
+                        onTap: () => _selectDate(true),
                         child: Text(DateFormat.yMMMd().format(_startDate)),
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: InkWell(
-                      onTap: () => _selectDate(false),
-                      child: InputDecorator(
-                        decoration: const InputDecoration(
-                          labelText: 'End Date',
-                          border: OutlineInputBorder(),
-                        ),
-                        child: Text(
-                          _endDate != null
-                              ? DateFormat.yMMMd().format(_endDate!)
-                              : 'Optional',
-                        ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: StyledFormField(
+                        label: 'End Date',
+                        icon: Icons.event_available,
+                        iconColor: const Color(0xFFF43F5E),
+                        trailing: const Icon(Icons.calendar_month, color: Colors.grey),
+                        onTap: () => _selectDate(false),
+                        child: Text(_endDate != null ? DateFormat.yMMMd().format(_endDate!) : 'Optional'),
                       ),
                     ),
+                  ],
+                ),
+
+                StyledFormField(
+                  label: 'Tech Stack',
+                  icon: Icons.code,
+                  iconColor: const Color(0xFFEC4899),
+                  child: TextFormField(
+                    controller: _techStackController,
+                    decoration: const InputDecoration(hintText: 'Enter tech stack used'),
                   ),
-                ],
-              ),
-              const SizedBox(height: 16),
-
-              TextFormField(
-                controller: _techStackController,
-                decoration: const InputDecoration(
-                  labelText: 'Tech Stack',
-                  border: OutlineInputBorder(),
                 ),
-              ),
-              const SizedBox(height: 16),
 
-              TextFormField(
-                controller: _outcomeController,
-                decoration: const InputDecoration(
-                  labelText: 'Outcome / Result',
-                  border: OutlineInputBorder(),
+                StyledFormField(
+                  label: 'Outcome / Result',
+                  icon: Icons.stars,
+                  iconColor: const Color(0xFFEAB308),
+                  child: TextFormField(
+                    controller: _outcomeController,
+                    decoration: const InputDecoration(hintText: 'Enter outcome or result'),
+                  ),
                 ),
-              ),
-              const SizedBox(height: 16),
 
-              TextFormField(
-                controller: _linkController,
-                decoration: const InputDecoration(
-                  labelText: 'Main Project URL',
-                  border: OutlineInputBorder(),
+                StyledFormField(
+                  label: 'Main Project URL',
+                  icon: Icons.link,
+                  iconColor: const Color(0xFF14B8A6),
+                  child: TextFormField(
+                    controller: _linkController,
+                    decoration: const InputDecoration(hintText: 'Enter project link'),
+                  ),
                 ),
-              ),
-              const SizedBox(height: 24),
+                const SizedBox(height: 8),
 
-              // Multiple Links Section
+                // Multiple Links Section
               DynamicLinkSection<EventLink>(
                 title: 'Additional Links',
                 items: _links,
@@ -345,6 +458,7 @@ class _HackathonAddEditScreenState extends State<HackathonAddEditScreen> {
               ),
               const SizedBox(height: 50),
             ],
+          ),
           ),
         ),
       ),

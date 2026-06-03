@@ -30,20 +30,16 @@ class LoginMailAutocomplete extends StatelessWidget {
       },
       fieldViewBuilder: (context, textEditingController, focusNode, onFieldSubmitted) {
         // Sync provided controller with this external one
-        if (textEditingController.text != controller.text &&
+        if (textEditingController.value != controller.value &&
             controller.text.isNotEmpty &&
             textEditingController.text.isEmpty) {
-          textEditingController.text = controller.text;
+          textEditingController.value = controller.value;
         }
 
         // Listen to changes to update the parent controller
         textEditingController.addListener(() {
-          // We need to be careful not to infinite loop if we were doing bidirectional bind,
-          // but here we just want to ensure `controller` has the value.
-          // However, `controller` is not a ValueNotifier we are listening to here,
-          // but we want to write TO it.
-          if (controller.text != textEditingController.text) {
-            controller.text = textEditingController.text;
+          if (controller.value != textEditingController.value) {
+            controller.value = textEditingController.value;
           }
         });
 

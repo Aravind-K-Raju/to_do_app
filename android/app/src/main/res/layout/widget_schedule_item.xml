@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="horizontal"
+    android:gravity="center_vertical"
+    android:paddingVertical="5dp"
+    android:paddingStart="4dp"
+    android:paddingEnd="4dp">
+
+    <!-- Timeline indicators column (vertical line + dot) -->
+    <RelativeLayout
+        android:layout_width="20dp"
+        android:layout_height="24dp"
+        android:layout_marginEnd="8dp">
+
+        <!-- Dashed or solid line running top-to-bottom -->
+        <FrameLayout
+            android:id="@+id/timeline_line"
+            android:layout_width="1.5dp"
+            android:layout_height="match_parent"
+            android:layout_centerHorizontal="true"
+            android:background="#2E2E3A" />
+
+        <!-- Overlay Circle node in the middle -->
+        <ImageView
+            android:id="@+id/timeline_dot"
+            android:layout_width="8dp"
+            android:layout_height="8dp"
+            android:layout_centerInParent="true"
+            android:src="@drawable/widget_timeline_circle"
+            android:contentDescription="@null" />
+    </RelativeLayout>
+
+    <!-- Activity Time Column -->
+    <TextView
+        android:id="@+id/item_time"
+        android:layout_width="72dp"
+        android:layout_height="wrap_content"
+        android:text="04:15 PM"
+        android:textColor="#9CA3AF"
+        android:textSize="12sp"
+        android:gravity="start" />
+
+    <!-- Activity Title Column (Takes remaining space) -->
+    <TextView
+        android:id="@+id/item_activity"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:text="Break"
+        android:textColor="#FFFFFF"
+        android:textSize="13sp"
+        android:textStyle="normal"
+        android:maxLines="1"
+        android:ellipsize="end" />
+
+</LinearLayout>

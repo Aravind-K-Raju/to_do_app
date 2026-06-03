@@ -3,9 +3,8 @@ import 'package:provider/provider.dart';
 import '../providers/course_provider.dart';
 import '../widgets/items/course_list_item.dart';
 import 'course_add_edit_screen.dart';
-import 'course_detail_screen.dart';
+import '../widgets/glass/prism_floating_action_button.dart';
 
-import 'notes/folder_list_screen.dart';
 
 class CourseListScreen extends StatefulWidget {
   const CourseListScreen({super.key});
@@ -30,18 +29,6 @@ class _CourseListScreenState extends State<CourseListScreen> {
       appBar: AppBar(
         title: const Text('Courses'),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.note_alt),
-            tooltip: 'Quick Notes',
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const FolderListScreen(),
-                ),
-              );
-            },
-          ),
         ],
       ),
       body: Consumer<CourseProvider>(
@@ -62,11 +49,11 @@ class _CourseListScreenState extends State<CourseListScreen> {
               final course = provider.courses[index];
               return CourseListItem(
                 course: course,
-                onTap: () {
+                onEdit: () {
                   Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (_) => CourseDetailScreen(course: course),
+                      builder: (_) => CourseAddEditScreen(course: course),
                     ),
                   );
                 },
@@ -106,15 +93,18 @@ class _CourseListScreenState extends State<CourseListScreen> {
           );
         },
       ),
-      floatingActionButton: FloatingActionButton(
-        heroTag: 'add_course_fab',
-        onPressed: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => const CourseAddEditScreen()),
-          );
-        },
-        child: const Icon(Icons.add),
+      floatingActionButton: Padding(
+        padding: const EdgeInsets.only(bottom: 80.0),
+        child: PrismFloatingActionButton(
+          heroTag: 'add_course_fab',
+          onPressed: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const CourseAddEditScreen()),
+            );
+          },
+          icon: Icons.add,
+        ),
       ),
     );
   }

@@ -1,0 +1,219 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_background"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@drawable/widget_glass_backdrop"
+    android:padding="14dp">
+
+    <!-- Top Header: Title and Sparkle AI Badge -->
+    <RelativeLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="10dp">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_alignParentStart="true"
+            android:layout_centerVertical="true"
+            android:text="Today's Schedule"
+            android:textColor="#FFFFFF"
+            android:textSize="15sp"
+            android:textStyle="bold"
+            android:fontFamily="sans-serif-medium" />
+    </RelativeLayout>
+
+    <!-- Floating Glass Card (Main Active Card) -->
+    <LinearLayout
+        android:id="@+id/widget_active_card"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:background="@drawable/widget_inner_glass_card"
+        android:padding="12dp"
+        android:layout_marginBottom="12dp"
+        android:gravity="center_vertical">
+
+        <!-- Left Info Panel (Task Details) -->
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <!-- Active Status Badge -->
+            <TextView
+                android:id="@+id/widget_status_badge"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:background="@drawable/widget_live_badge"
+                android:text="LIVE NOW"
+                android:textColor="#FFFFFF"
+                android:textSize="9sp"
+                android:textStyle="bold"
+                android:paddingHorizontal="8dp"
+                android:paddingVertical="3dp"
+                android:layout_marginBottom="6dp" />
+
+            <!-- Time slot or Pause Details -->
+            <TextView
+                android:id="@+id/widget_time_slot"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="02:00 PM - 04:00 PM"
+                android:textColor="#9CA3AF"
+                android:textSize="12sp"
+                android:textStyle="bold"
+                android:layout_marginBottom="4dp" />
+
+            <!-- Task Title -->
+            <TextView
+                android:id="@+id/widget_active_title"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Data Structures &amp; Algorithms"
+                android:textColor="#FFFFFF"
+                android:textSize="14sp"
+                android:textStyle="bold"
+                android:layout_marginBottom="6dp"
+                android:maxLines="1"
+                android:ellipsize="end" />
+
+            <!-- Study Category and Book Icon -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:layout_marginBottom="8dp">
+
+                <ImageView
+                    android:layout_width="12dp"
+                    android:layout_height="12dp"
+                    android:src="@drawable/ic_book"
+                    android:layout_marginEnd="4dp"
+                    android:contentDescription="@null" />
+
+                <TextView
+                    android:id="@+id/widget_category_label"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Course Study"
+                    android:textColor="#9CA3AF"
+                    android:textSize="11sp" />
+            </LinearLayout>
+
+            <!-- Remaining Time or Pause Projection -->
+            <LinearLayout
+                android:id="@+id/widget_projection_container"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/widget_remaining_time"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Ends in 43m"
+                    android:textColor="#A78BFA"
+                    android:textSize="11sp"
+                    android:textStyle="bold" />
+
+                <!-- Paused projection info removed per user request -->
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- Right Button Panel (Interactive Glass Card Button) -->
+        <LinearLayout
+            android:id="@+id/widget_button_glass_card"
+            android:layout_width="80dp"
+            android:layout_height="88dp"
+            android:orientation="vertical"
+            android:background="@drawable/widget_button_glass_card"
+            android:gravity="center"
+            android:layout_marginStart="12dp">
+
+            <!-- Play/Pause Circular Action Button -->
+            <RelativeLayout
+                android:id="@+id/widget_toggle_button"
+                android:layout_width="44dp"
+                android:layout_height="44dp"
+                android:gravity="center"
+                android:layout_marginBottom="6dp"
+                android:background="@drawable/widget_pause_button">
+
+                <ImageView
+                    android:id="@+id/widget_toggle_icon"
+                    android:layout_width="16dp"
+                    android:layout_height="16dp"
+                    android:src="@drawable/ic_pause"
+                    android:layout_centerInParent="true"
+                    android:contentDescription="@null" />
+
+                <ProgressBar
+                    android:id="@+id/widget_loading_progress"
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
+                    android:layout_centerInParent="true"
+                    android:indeterminate="true"
+                    android:indeterminateTint="#FFFFFF"
+                    android:visibility="gone" />
+            </RelativeLayout>
+
+            <!-- State Label text below button ("IN" or "OUT") -->
+            <TextView
+                android:id="@+id/widget_toggle_label"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="OUT"
+                android:textColor="#C4B5FD"
+                android:textSize="11sp"
+                android:textStyle="bold"
+                android:letterSpacing="0.08" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <!-- Divider or Upcoming Header -->
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="UPCOMING SCHEDULES"
+        android:textColor="#26FFFFFF"
+        android:textSize="9sp"
+        android:textStyle="bold"
+        android:letterSpacing="0.08"
+        android:layout_marginBottom="4dp"
+        android:visibility="gone" />
+
+    <!-- Container for dynamic upcoming schedule rows -->
+    <LinearLayout
+        android:id="@+id/widget_schedule_list"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:orientation="vertical"
+        android:gravity="top" />
+
+    <!-- Quick Notes Section -->
+    <TextView
+        android:id="@+id/widget_notes_header"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="QUICK NOTES"
+        android:textColor="#33FFFFFF"
+        android:textSize="9sp"
+        android:textStyle="bold"
+        android:letterSpacing="0.08"
+        android:layout_marginTop="8dp"
+        android:layout_marginBottom="4dp" />
+
+    <LinearLayout
+        android:id="@+id/widget_notes_list"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:gravity="top" />
+
+</LinearLayout>

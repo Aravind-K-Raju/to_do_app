@@ -87,7 +87,7 @@ class NoteProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> createNote(String title, String content, {int? folderId}) async {
+  Future<int?> createNote(String title, String content, {int? folderId}) async {
     _setLoading(true);
     try {
       final note = Note(
@@ -97,10 +97,12 @@ class NoteProvider extends ChangeNotifier {
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),
       );
-      await _repository.createNote(note);
+      final id = await _repository.createNote(note);
       await loadNotes(folderId: folderId);
+      return id;
     } catch (e) {
       _error = e.toString();
+      return null;
     } finally {
       _setLoading(false);
     }

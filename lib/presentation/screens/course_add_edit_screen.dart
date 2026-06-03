@@ -1,14 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
+import 'dart:convert';
 import '../../domain/entities/course.dart';
 import '../../domain/entities/course_link.dart';
 import '../../domain/entities/course_date.dart';
 import '../providers/course_provider.dart';
-// Import reusable widgets
+import '../providers/draft_provider.dart';
 import '../widgets/form/dynamic_link_section.dart';
 import '../widgets/form/dynamic_timeline_section.dart';
-import '../widgets/form/login_mail_autocomplete.dart';
+import '../widgets/form/styled_app_bar.dart';
+import '../widgets/form/styled_form_field.dart';
 
 class CourseAddEditScreen extends StatefulWidget {
   final Course? course;
@@ -19,7 +21,7 @@ class CourseAddEditScreen extends StatefulWidget {
   State<CourseAddEditScreen> createState() => _CourseAddEditScreenState();
 }
 
-class _CourseAddEditScreenState extends State<CourseAddEditScreen> {
+class _CourseAddEditScreenState extends State<CourseAddEditScreen> with WidgetsBindingObserver {
   final _formKey = GlobalKey<FormState>();
   late TextEditingController _titleController;
   late TextEditingController
@@ -35,6 +37,9 @@ class _CourseAddEditScreenState extends State<CourseAddEditScreen> {
   // Dynamic Lists
   List<CourseLink> _links = [];
   List<CourseDate> _timeline = [];
+  
+  bool _isSaved = false;
+  bool _canPop = false;
 
   @override
   void initState() {
@@ -70,6 +75,60 @@ class _CourseAddEditScreenState extends State<CourseAddEditScreen> {
       _startDate = widget.course!.startDate;
       _links = List.from(widget.course!.links);
       _timeline = List.from(widget.course!.timeline);
+    } else {
+      _loadDraft();
+    }
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  Future<void> _loadDraft() async {
+    final draftProvider = Provider.of<DraftProvider>(context, listen: false);
+    final draftJson = await draftProvider.getDraft('draft_course');
+    if (draftJson != null && mounted) {
+      try {
+        final data = jsonDecode(draftJson);
+        setState(() {
+          _titleController.text = data['title'] ?? '';
+          _sourceNameController.text = data['sourceName'] ?? '';
+          _channelNameController.text = data['channelName'] ?? '';
+          _loginMailController.text = data['loginMail'] ?? '';
+          _descriptionController.text = data['description'] ?? '';
+          _type = CourseType.values.firstWhere((e) => e.name == data['type'], orElse: () => CourseType.site);
+          _status = data['status'] ?? 'planned';
+        });
+      } catch (e) {
+        debugPrint('Error loading draft: $e');
+      }
+    }
+  }
+
+  bool _hasData() {
+    return _titleController.text.isNotEmpty || _sourceNameController.text.isNotEmpty || _descriptionController.text.isNotEmpty;
+  }
+
+  Future<void> _saveDraft() async {
+    if (_hasData()) {
+      final draftData = {
+        'title': _titleController.text,
+        'sourceName': _sourceNameController.text,
+        'channelName': _channelNameController.text,
+        'loginMail': _loginMailController.text,
+        'description': _descriptionController.text,
+        'type': _type.name,
+        'status': _status,
+      };
+      await Provider.of<DraftProvider>(context, listen: false).saveDraft('draft_course', jsonEncode(draftData));
+    } else {
+      await Provider.of<DraftProvider>(context, listen: false).clearDraft('draft_course');
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive) {
+      if (!_isSaved && widget.course == null) {
+        _saveDraft();
+      }
     }
   }
 
@@ -80,6 +139,7 @@ class _CourseAddEditScreenState extends State<CourseAddEditScreen> {
     _channelNameController.dispose();
     _loginMailController.dispose();
     _descriptionController.dispose();
+    WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
 
@@ -129,210 +189,239 @@ class _CourseAddEditScreenState extends State<CourseAddEditScreen> {
       } else {
         provider.editCourse(newCourse);
       }
+      
+      _isSaved = true;
+      if (widget.course == null) {
+        Provider.of<DraftProvider>(context, listen: false).clearDraft('draft_course');
+      }
+      setState(() { _canPop = true; });
       Navigator.pop(context);
     }
   }
 
+  Future<void> _handleBack() async {
+    if (!_isSaved && widget.course == null) {
+      if (_hasData()) {
+        await _saveDraft();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Draft saved')));
+        }
+      } else {
+        await Provider.of<DraftProvider>(context, listen: false).clearDraft('draft_course');
+      }
+    }
+    setState(() { _canPop = true; });
+    if (mounted) Navigator.pop(context);
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(widget.course == null ? 'Add Project' : 'Edit Project'),
-        actions: [
-          IconButton(icon: const Icon(Icons.check), onPressed: _saveCourse),
-        ],
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Form(
-          key: _formKey,
-          child: ListView(
-            children: [
-              TextFormField(
-                controller: _titleController,
-                decoration: const InputDecoration(
-                  labelText: 'Title',
-                  border: OutlineInputBorder(),
+    return PopScope(
+      canPop: _canPop,
+      onPopInvokedWithResult: (didPop, result) async {
+        if (didPop) return;
+        await _handleBack();
+      },
+      child: Scaffold(
+        appBar: StyledAppBar(
+          title: widget.course == null ? 'Add Project' : 'Edit Project',
+          subtitle: 'Create a new project and stay organized',
+          onBack: _handleBack,
+          onSave: _saveCourse,
+          isEditMode: widget.course != null,
+        ),
+        body: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16.0),
+          child: Form(
+            key: _formKey,
+            child: ListView(
+              children: [
+                const SizedBox(height: 16),
+                StyledFormField(
+                  label: 'Title',
+                  icon: Icons.description,
+                  iconColor: const Color(0xFF7C3AED),
+                  child: TextFormField(
+                    controller: _titleController,
+                    decoration: const InputDecoration(hintText: 'Enter project title'),
+                    validator: (val) => val!.isEmpty ? 'Enter title' : null,
+                  ),
                 ),
-                validator: (val) => val!.isEmpty ? 'Enter title' : null,
-              ),
-              const SizedBox(height: 16),
-
-              // Type Selection
-              DropdownButtonFormField<CourseType>(
-                value: _type,
-                items: CourseType.values.map((t) {
-                  String label = t.toString().split('.').last;
-                  label = label[0].toUpperCase() + label.substring(1);
-                  if (label == 'SelfPaced') label = 'Self Paced';
-                  return DropdownMenuItem(value: t, child: Text(label));
-                }).toList(),
-                onChanged: (val) {
-                  setState(() {
-                    _type = val!;
-                    // Clear fields if switching types makes them irrelevant?
-                    // Keeping text might be better for UX if user switches back.
-                  });
-                },
-                decoration: const InputDecoration(
-                  labelText: 'Type',
-                  border: OutlineInputBorder(),
+                StyledFormField(
+                  label: 'Type',
+                  icon: Icons.local_offer,
+                  iconColor: const Color(0xFF3B82F6),
+                  trailing: const Icon(Icons.keyboard_arrow_down, color: Colors.grey),
+                  child: DropdownButtonFormField<CourseType>(
+                    value: _type,
+                    icon: const SizedBox.shrink(), // hide default icon
+                    items: CourseType.values.map((t) {
+                      String label = t.toString().split('.').last;
+                      label = label[0].toUpperCase() + label.substring(1);
+                      if (label == 'SelfPaced') label = 'Self Paced';
+                      return DropdownMenuItem(value: t, child: Text(label));
+                    }).toList(),
+                    onChanged: (val) {
+                      setState(() {
+                        _type = val!;
+                      });
+                    },
+                  ),
                 ),
-              ),
-              const SizedBox(height: 16),
 
-              // Dynamic Fields based on Type
-              if (_type == CourseType.site) ...[
+                if (_type == CourseType.site) ...[
+                  Consumer<CourseProvider>(
+                    builder: (context, provider, child) {
+                      return Autocomplete<String>(
+                        optionsBuilder: (TextEditingValue textEditingValue) {
+                          if (textEditingValue.text == '') return const Iterable<String>.empty();
+                          return provider.distinctSites.where((String option) => option.toLowerCase().contains(textEditingValue.text.toLowerCase()));
+                        },
+                        onSelected: (String selection) => _sourceNameController.text = selection,
+                        fieldViewBuilder: (context, textEditingController, focusNode, onFieldSubmitted) {
+                          if (textEditingController.value != _sourceNameController.value && _sourceNameController.text.isNotEmpty && textEditingController.text.isEmpty) {
+                            textEditingController.value = _sourceNameController.value;
+                          }
+                          textEditingController.addListener(() {
+                            if (_sourceNameController.value != textEditingController.value) {
+                              _sourceNameController.value = textEditingController.value;
+                            }
+                          });
+                          
+                          return StyledFormField(
+                            label: 'Site Name',
+                            icon: Icons.domain,
+                            iconColor: const Color(0xFF10B981),
+                            helperText: 'Select from existing or type new',
+                            child: TextFormField(
+                              controller: textEditingController,
+                              focusNode: focusNode,
+                              onFieldSubmitted: (String value) => onFieldSubmitted(),
+                              decoration: const InputDecoration(hintText: 'Enter site name'),
+                              validator: (val) => val!.isEmpty ? 'Enter Site Name' : null,
+                            ),
+                          );
+                        },
+                      );
+                    },
+                  ),
+                ],
+
+                if (_type == CourseType.platform) ...[
+                  StyledFormField(
+                    label: 'Platform Name (e.g., YouTube)',
+                    icon: Icons.video_library,
+                    iconColor: Colors.redAccent,
+                    child: TextFormField(
+                      controller: _sourceNameController,
+                      decoration: const InputDecoration(hintText: 'Enter platform name'),
+                      validator: (val) => val!.isEmpty ? 'Enter Platform Name' : null,
+                    ),
+                  ),
+                  StyledFormField(
+                    label: 'Channel/Creator Name (Optional)',
+                    icon: Icons.person,
+                    iconColor: Colors.deepOrangeAccent,
+                    child: TextFormField(
+                      controller: _channelNameController,
+                      decoration: const InputDecoration(hintText: 'Enter channel name'),
+                    ),
+                  ),
+                ],
+
+                if (_type == CourseType.selfPaced) ...[
+                  StyledFormField(
+                    label: 'Source / Institution',
+                    icon: Icons.school,
+                    iconColor: Colors.tealAccent,
+                    child: TextFormField(
+                      controller: _sourceNameController,
+                      decoration: const InputDecoration(hintText: 'Enter source'),
+                      validator: (val) => val!.isEmpty ? 'Enter Source' : null,
+                    ),
+                  ),
+                ],
+
+                Row(
+                  children: [
+                    Expanded(
+                      child: StyledFormField(
+                        label: 'Status',
+                        icon: Icons.flag,
+                        iconColor: const Color(0xFF6366F1),
+                        trailing: const Icon(Icons.keyboard_arrow_down, color: Colors.grey),
+                        child: DropdownButtonFormField<String>(
+                          value: _status,
+                          icon: const SizedBox.shrink(),
+                          items: ['planned', 'ongoing', 'completed']
+                              .map((s) => DropdownMenuItem(value: s, child: Text(s[0].toUpperCase() + s.substring(1))))
+                              .toList(),
+                          onChanged: (val) => setState(() => _status = val!),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: StyledFormField(
+                        label: 'Start Date',
+                        icon: Icons.calendar_today,
+                        iconColor: const Color(0xFF3B82F6),
+                        trailing: const Icon(Icons.calendar_month, color: Colors.grey),
+                        onTap: () => _selectDate(onPicked: (d) => setState(() => _startDate = d)),
+                        child: Text(DateFormat.yMMMd().format(_startDate)),
+                      ),
+                    ),
+                  ],
+                ),
+
                 Consumer<CourseProvider>(
                   builder: (context, provider, child) {
                     return Autocomplete<String>(
                       optionsBuilder: (TextEditingValue textEditingValue) {
-                        if (textEditingValue.text == '') {
-                          return const Iterable<String>.empty();
+                        if (textEditingValue.text == '') return const Iterable<String>.empty();
+                        return provider.distinctLoginMails.where((String option) => option.toLowerCase().contains(textEditingValue.text.toLowerCase()));
+                      },
+                      onSelected: (String selection) => _loginMailController.text = selection,
+                      fieldViewBuilder: (context, textEditingController, focusNode, onFieldSubmitted) {
+                        if (textEditingController.value != _loginMailController.value && _loginMailController.text.isNotEmpty && textEditingController.text.isEmpty) {
+                          textEditingController.value = _loginMailController.value;
                         }
-                        return provider.distinctSites.where((String option) {
-                          return option.toLowerCase().contains(
-                            textEditingValue.text.toLowerCase(),
-                          );
+                        textEditingController.addListener(() {
+                          if (_loginMailController.value != textEditingController.value) {
+                            _loginMailController.value = textEditingController.value;
+                          }
                         });
+                        
+                        return StyledFormField(
+                          label: 'Login Mail (Optional)',
+                          icon: Icons.email,
+                          iconColor: const Color(0xFF0EA5E9),
+                          helperText: 'Account used for login',
+                          child: TextFormField(
+                            controller: textEditingController,
+                            focusNode: focusNode,
+                            onFieldSubmitted: (String value) => onFieldSubmitted(),
+                            decoration: const InputDecoration(hintText: 'Enter login email'),
+                          ),
+                        );
                       },
-                      onSelected: (String selection) {
-                        _sourceNameController.text = selection;
-                      },
-                      fieldViewBuilder:
-                          (
-                            context,
-                            textEditingController,
-                            focusNode,
-                            onFieldSubmitted,
-                          ) {
-                            // Sync provided controller with ours
-                            if (textEditingController.text !=
-                                    _sourceNameController.text &&
-                                _sourceNameController.text.isNotEmpty &&
-                                textEditingController.text.isEmpty) {
-                              textEditingController.text =
-                                  _sourceNameController.text;
-                            }
-                            textEditingController.addListener(() {
-                              _sourceNameController.text =
-                                  textEditingController.text;
-                            });
-
-                            return TextFormField(
-                              controller: textEditingController,
-                              focusNode: focusNode,
-                              onFieldSubmitted: (String value) {
-                                onFieldSubmitted();
-                              },
-                              decoration: const InputDecoration(
-                                labelText: 'Site Name',
-                                border: OutlineInputBorder(),
-                                helperText: 'Select from existing or type new',
-                              ),
-                              validator: (val) =>
-                                  val!.isEmpty ? 'Enter Site Name' : null,
-                            );
-                          },
                     );
                   },
                 ),
-              ],
 
-              if (_type == CourseType.platform) ...[
-                TextFormField(
-                  controller: _sourceNameController,
-                  decoration: const InputDecoration(
-                    labelText: 'Platform Name (e.g., YouTube)',
-                    border: OutlineInputBorder(),
+                StyledFormField(
+                  label: 'Description (Optional)',
+                  icon: Icons.description,
+                  iconColor: const Color(0xFFF59E0B),
+                  child: TextFormField(
+                    controller: _descriptionController,
+                    decoration: const InputDecoration(hintText: 'Add a short description about this project...'),
+                    maxLines: 3,
                   ),
-                  validator: (val) =>
-                      val!.isEmpty ? 'Enter Platform Name' : null,
                 ),
                 const SizedBox(height: 8),
-                TextFormField(
-                  controller: _channelNameController,
-                  decoration: const InputDecoration(
-                    labelText: 'Channel/Creator Name (Optional)',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-              ],
 
-              if (_type == CourseType.selfPaced) ...[
-                TextFormField(
-                  controller: _sourceNameController,
-                  decoration: const InputDecoration(
-                    labelText: 'Source / Institution',
-                    border: OutlineInputBorder(),
-                  ),
-                  validator: (val) => val!.isEmpty ? 'Enter Source' : null,
-                ),
-              ],
-
-              const SizedBox(height: 16),
-
-              Row(
-                children: [
-                  Expanded(
-                    child: DropdownButtonFormField<String>(
-                      value: _status,
-                      items: ['planned', 'ongoing', 'completed']
-                          .map(
-                            (s) => DropdownMenuItem(
-                              value: s,
-                              child: Text(s[0].toUpperCase() + s.substring(1)),
-                            ),
-                          )
-                          .toList(),
-                      onChanged: (val) => setState(() => _status = val!),
-                      decoration: const InputDecoration(
-                        labelText: 'Status',
-                        border: OutlineInputBorder(),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: InkWell(
-                      onTap: () => _selectDate(
-                        onPicked: (d) => setState(() => _startDate = d),
-                      ),
-                      child: InputDecorator(
-                        decoration: const InputDecoration(
-                          labelText: 'Start Date',
-                          border: OutlineInputBorder(),
-                        ),
-                        child: Text(DateFormat.yMMMd().format(_startDate)),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-
-              // Login Mail Autocomplete
-              Consumer<CourseProvider>(
-                builder: (context, provider, child) {
-                  return LoginMailAutocomplete(
-                    controller: _loginMailController,
-                    distinctLoginMails: provider.distinctLoginMails,
-                  );
-                },
-              ),
-              const SizedBox(height: 16),
-
-              TextFormField(
-                controller: _descriptionController,
-                decoration: const InputDecoration(
-                  labelText: 'Description',
-                  border: OutlineInputBorder(),
-                ),
-                maxLines: 3,
-              ),
-              const SizedBox(height: 24),
-
-              // Multiple Links Section
+                // Multiple Links Section
               DynamicLinkSection<CourseLink>(
                 title: 'Links',
                 items: _links,
@@ -391,6 +480,7 @@ class _CourseAddEditScreenState extends State<CourseAddEditScreen> {
               ),
               const SizedBox(height: 50),
             ],
+          ),
           ),
         ),
       ),

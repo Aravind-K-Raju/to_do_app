@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:provider/provider.dart';
 import 'core/app_constants.dart';
 import 'core/app_theme.dart';
@@ -15,6 +16,8 @@ import 'data/repositories/intelligence_repository_impl.dart';
 import 'data/repositories/assignment_repository_impl.dart';
 import 'data/repositories/note_repository_impl.dart';
 import 'presentation/providers/note_provider.dart';
+import 'core/services/draft_service.dart';
+import 'presentation/providers/draft_provider.dart';
 import 'domain/usecases/get_courses.dart';
 import 'domain/usecases/create_course.dart';
 import 'domain/usecases/update_course.dart';
@@ -31,6 +34,18 @@ import 'domain/usecases/assignment_usecases.dart';
 
 import 'dart:io';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'package:home_widget/home_widget.dart';
+import 'core/services/widget_sync_service.dart';
+
+@pragma('vm:entry-point')
+Future<void> backgroundCallback(Uri? uri) async {
+  if (uri?.host == 'toggle_pause') {
+    final isPaused = uri?.queryParameters['is_paused'] == 'true';
+    final action = isPaused ? 'pause' : 'resume';
+    final pausedAt = uri?.queryParameters['paused_at'];
+    await WidgetSyncService.runBackgroundReschedule(action: action, pausedAt: pausedAt);
+  }
+}
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -38,6 +53,11 @@ void main() {
     sqfliteFfiInit();
     databaseFactory = databaseFactoryFfi;
   }
+  // Register background callback for home screen widget interactions
+  HomeWidget.registerInteractivityCallback(backgroundCallback);
+
+  // Synchronize the home screen widgets on application startup asynchronously
+  WidgetSyncService.syncWidget();
   runApp(const OfflineApp());
 }
 
@@ -52,6 +72,7 @@ class OfflineApp extends StatelessWidget {
     final intelligenceRepository = IntelligenceRepositoryImpl();
     final assignmentRepository = AssignmentRepositoryImpl();
     final noteRepository = NoteRepositoryImpl();
+    final draftService = DraftService();
 
     return MultiProvider(
       providers: [
@@ -100,11 +121,18 @@ class OfflineApp extends StatelessWidget {
           ),
         ),
         ChangeNotifierProvider(create: (_) => NoteProvider(noteRepository)),
+        ChangeNotifierProvider(create: (_) => DraftProvider(draftService)),
       ],
       child: MaterialApp(
         debugShowCheckedModeBanner: false,
         title: AppConstants.appTitle,
         theme: AppTheme.darkTheme,
+        localizationsDelegates: const [
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        supportedLocales: const [Locale('en', 'US'), Locale('en', 'GB')],
         home: const NavigationScaffold(),
       ),
     );

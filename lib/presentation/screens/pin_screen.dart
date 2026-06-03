@@ -185,7 +185,7 @@ class _PinScreenState extends State<PinScreen> {
             ),
             child: Text(
               key,
-              style: const TextStyle(fontSize: 28, color: Colors.white),
+              style: TextStyle(fontSize: 28, color: Theme.of(context).colorScheme.onSurface),
             ),
           );
         }).toList(),

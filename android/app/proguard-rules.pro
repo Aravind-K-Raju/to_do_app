@@ -17,3 +17,10 @@
 # General
 -dontwarn javax.annotation.**
 -keepattributes *Annotation*
+
+# ToDo App Custom Widget & Notes Activities
+-keep class com.example.to_do_app.** { *; }
+
+# Home Widget Package Classes
+-keep class es.antonborri.home_widget.** { *; }
+

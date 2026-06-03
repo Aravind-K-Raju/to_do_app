@@ -17,18 +17,24 @@ subprojects {
         project.layout.buildDirectory.value(newBuildDir.dir(project.name))
     }
 
-    project.plugins.withId("com.android.library") {
-        val androidExtension = project.extensions.getByName("android")
-                as com.android.build.gradle.LibraryExtension
-        androidExtension.compileOptions {
-            sourceCompatibility = JavaVersion.VERSION_17
-            targetCompatibility = JavaVersion.VERSION_17
-        }
-    }
-
+    // Dynamically align Kotlin's JVM target with Java compatibility settings lazily during task configuration
+    // to bypass Gradle evaluation lifecycle finalization restrictions
     project.tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile::class.java).configureEach {
+        var targetCompat = "1.8"
+        val android = project.extensions.findByName("android")
+        if (android != null) {
+            try {
+                val compileOptions = android.javaClass.getMethod("getCompileOptions").invoke(android)
+                val target = compileOptions.javaClass.getMethod("getTargetCompatibility").invoke(compileOptions)
+                if (target != null) {
+                    targetCompat = target.toString()
+                }
+            } catch (e: Exception) {
+                // Clean fallback to "1.8" if reflection fails or property is null
+            }
+        }
         kotlinOptions {
-            jvmTarget = "17"
+            jvmTarget = targetCompat
         }
     }
 }

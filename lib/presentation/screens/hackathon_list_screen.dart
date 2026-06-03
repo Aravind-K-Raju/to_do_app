@@ -3,7 +3,7 @@ import 'package:provider/provider.dart';
 import '../providers/hackathon_provider.dart';
 import '../widgets/items/hackathon_list_item.dart';
 import 'hackathon_add_edit_screen.dart';
-import 'hackathon_detail_screen.dart';
+import '../widgets/glass/prism_floating_action_button.dart';
 
 class HackathonListScreen extends StatefulWidget {
   const HackathonListScreen({super.key});
@@ -41,12 +41,12 @@ class _HackathonListScreenState extends State<HackathonListScreen> {
               final hackathon = provider.hackathons[index];
               return HackathonListItem(
                 hackathon: hackathon,
-                onTap: () {
+                onEdit: () {
                   Navigator.push(
                     context,
                     MaterialPageRoute(
                       builder: (_) =>
-                          HackathonDetailScreen(hackathon: hackathon),
+                          HackathonAddEditScreen(hackathon: hackathon),
                     ),
                   );
                 },
@@ -86,14 +86,18 @@ class _HackathonListScreenState extends State<HackathonListScreen> {
           );
         },
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => const HackathonAddEditScreen()),
-          );
-        },
-        child: const Icon(Icons.add),
+      floatingActionButton: Padding(
+        padding: const EdgeInsets.only(bottom: 80.0),
+        child: PrismFloatingActionButton(
+          heroTag: 'add_hackathon_fab',
+          onPressed: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const HackathonAddEditScreen()),
+            );
+          },
+          icon: Icons.add,
+        ),
       ),
     );
   }

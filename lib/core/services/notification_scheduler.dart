@@ -34,9 +34,9 @@ class NotificationScheduler {
     final insertedIds = <int>[];
 
     final offsets = <int, String>{};
-    if (sameDay) offsets[0] = 'Today: $bodyText';
-    if (oneDay) offsets[1] = 'Tomorrow: $bodyText';
     if (threeDays) offsets[3] = 'In 3 Days: $bodyText';
+    if (oneDay) offsets[1] = 'Tomorrow: $bodyText';
+    if (sameDay) offsets[0] = 'Today: $bodyText';
 
     for (final entry in offsets.entries) {
       final scheduledDate = DateTime(

@@ -7,7 +7,8 @@ abstract class IntelligenceRepository {
   Future<InsightsData> getInsightsData();
   Future<List<SearchResult>> search(
     String query, {
-    DateTime? date,
+    List<DateTime>? dates,
     String? type,
+    bool yetToCompleteOnly = false,
   });
 }

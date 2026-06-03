@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../providers/assignment_provider.dart';
 import '../widgets/items/assignment_list_item.dart';
 import 'assignment_add_edit_screen.dart';
+import '../widgets/glass/prism_floating_action_button.dart';
 
 class AssignmentListScreen extends StatefulWidget {
   const AssignmentListScreen({super.key});
@@ -65,14 +66,18 @@ class _AssignmentListScreenState extends State<AssignmentListScreen>
           );
         },
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => const AssignmentAddEditScreen()),
-          );
-        },
-        child: const Icon(Icons.add),
+      floatingActionButton: Padding(
+        padding: const EdgeInsets.only(bottom: 80.0),
+        child: PrismFloatingActionButton(
+          heroTag: 'add_assignment_fab',
+          onPressed: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const AssignmentAddEditScreen()),
+            );
+          },
+          icon: Icons.add,
+        ),
       ),
     );
   }
@@ -87,7 +92,7 @@ class _AssignmentListScreenState extends State<AssignmentListScreen>
         final assignment = assignments[index];
         return AssignmentListItem(
           assignment: assignment,
-          onTap: () {
+          onEdit: () {
             Navigator.push(
               context,
               MaterialPageRoute(
